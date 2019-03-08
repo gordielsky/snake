@@ -1,0 +1,32 @@
+module random(clock, max_number, num_out);
+/*
+    Module that will generate a pseudorandom number
+    A faster clock  will generate a "more" random number
+    max_number is an 8 bit input, which dictates the maximum number that will be
+    outputted from the module.
+*/
+input clock;
+input [7:0]max_number;
+
+output [7:0]num_out;
+
+reg [7:0]counter;
+
+assign num_out = counter;
+
+always@(posedge clock)
+begin
+    case(counter):
+    begin
+        if(counter == max_number)
+        begin
+            counter <= 7'd0;
+        end
+        else
+        begin
+            counter <= counter + 1'b1;
+        end
+    endcase
+end
+
+endmodule
