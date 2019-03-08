@@ -18,7 +18,7 @@ always@(posedge clock)
 begin
     if(counter == max_number)
     begin
-        counter <= 7'd0;
+        counter <= 8'd0;
     end
     else
     begin
