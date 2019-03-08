@@ -16,17 +16,14 @@ assign num_out = counter;
 
 always@(posedge clock)
 begin
-    case(counter):
+    if(counter == max_number)
     begin
-        if(counter == max_number)
-        begin
-            counter <= 7'd0;
-        end
-        else
-        begin
-            counter <= counter + 1'b1;
-        end
-    endcase
+        counter <= 7'd0;
+    end
+    else
+    begin
+        counter <= counter + 1'b1;
+    end
 end
 
 endmodule
