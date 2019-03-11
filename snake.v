@@ -122,8 +122,9 @@ module control(
 	input [14:0] counter,
 	// Direction inputs
 	input mv_left, mv_right, mv_down, mv_up,
-	// Snake position, 8 bits per coordinate (piece of snake)
-	input [1023:0] snake_x,
+	// Snake position, 8 bits per coordinate (piece of snake) 
+	// head of snake is snake_x[7:0] , snake_y[7:0], second piece is [15:8], etc.
+	input [1023:0] snake_x, 
 	input [1023:0] snake_y,
 	// Size of the snake
 	input [7:0] snake_size,
@@ -149,7 +150,7 @@ module control(
 	
 	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
 				S_STARTING 		= 5'd1, // press start game button
-				S_STARTING_WAIT = 5'd2, // stop presseing start game button
+				S_STARTING_WAIT = 5'd2, // stop pressing start game button
 				S_LOAD_GAME		= 5'd3, // load initial snake pos, random walls
 				S_MAKE_APPLE	= 5'd4, // load apple position
 				S_CLR_SCREEN	= 5'd5, // clear the screen
@@ -195,12 +196,14 @@ module control(
 					next_state = S_DRAW_SNAKE;
 				end
 			S_MOVING: begin
-				if (in wall or in self)
+				// check if the snake head touched a wall or itself
+				// need some way to check as the possible values
+				if (1'b0 && (in wall || in self))	// set to always be false for now
 					next_state = S_DEAD;
-				else if (in apple)
-					next_state = S_MUNCHING
+				else if (snake_x[7:0] == apple_x[7:0] && snake_y[7:0] == {1'b0, apple_y[6:0]}) 	// check the snake head touched the apple
+					next_state = S_MUNCHING;
 				else
-					next_state = S_CLR_SCREEN
+					next_state = S_CLR_SCREEN;
 				end
 			S_MUNCHING: next_state = S_MAKE_APPLE;
 			S_DEAD: next_state = S_SCORE_MENU;
@@ -283,4 +286,14 @@ module datapath(
 	output [6:0] draw_y
 	);
 
+
+	// Input logic based on grow / dead
+    always@(posedge clk) begin
+        if(grow)
+           
+        else if(dead)
+           
+        else
+			
+    end
 endmodule
