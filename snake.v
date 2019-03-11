@@ -42,6 +42,16 @@ module snake(
 	
 	wire [14:0] counter;
 	
+	wire resetn;
+	
+	
+	// current state of the game
+	wire [4:0] state;
+	// previous state of the game
+	wire [4:0] prev_state;
+	// for debugging, show current state on leds
+	assign LEDR[4:0] = state;
+
 	// Create an Instance of a VGA controller - there can be only one!
 	// Define the number of colours as well as the initial background
 	// image file (.MIF) for the controller.
@@ -51,7 +61,7 @@ module snake(
 			.colour(colour),
 			.x(x),
 			.y(y),
-			.plot(writeEn),
+			.plot(plot),
 			/* Signals for the DAC to drive the monitor. */
 			.VGA_R(VGA_R),
 			.VGA_G(VGA_G),
@@ -90,7 +100,8 @@ module snake(
 		.grow(grow),
 		.dead(dead),
 		.direction(direction),
-		.curr_state(LEDR[4:0])
+		.current_state(state),
+		.prev_state(prev_state)
 		);
 		
 	datapath d0(
@@ -109,7 +120,10 @@ module snake(
 		.apple_y(apple_y),
 		
 		.draw_x(x),
-		.draw_y(y)
+		.draw_y(y),
+		.colour(colour),
+		.current_state(state),
+		.prev_state(prev_state)
 		);
 	
 endmodule
@@ -136,17 +150,17 @@ module control(
 	//input [num_random_walls * 8:0] wall_y,
 
 	// Whether a pixel is being drawn this tick
-	output plot,
+	output reg plot,
 	// Snake hits apple -> grow /// Snake hit wall or itself -> dead
-	output grow, dead,
+	output reg grow, dead,
 	// Left: 00 / Right: 01 / Down: 10 / Up: 11
-	output [1:0] direction,
+	output reg [1:0] direction,
 	// Current state (for testing purposes)
 	// Has extra bit so that space can be used if needed
-	output [4:0] curr_state
+	output reg [4:0] current_state, prev_state
 	);
 	
-	reg [4:0] current_state, next_state; 
+	reg [4:0] next_state; 
 	
 	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
 				S_STARTING 		= 5'd1, // press start game button
@@ -161,6 +175,11 @@ module control(
 				S_MUNCHING		= 5'd10,
 				S_DEAD			= 5'd11,
 				S_SCORE_MENU	= 5'd12;
+
+	localparam 	LEFT = 2'b00,
+				RIGHT = 2'b01,
+				DOWN = 2'b10,
+				UP = 2'b11;
 
 	wire [15:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX;
 	assign CLR_SCREEN_MAX = 15'd19_200; // 160 * 120
@@ -178,7 +197,7 @@ module control(
 			S_MAKE_APPLE: next_state = S_CLR_SCREEN;
 			S_CLR_SCREEN: begin
 				if (counter == CLR_SCREEN_MAX)
-					next_state = S_DRAW_WALLs;
+					next_state = S_DRAW_WALLS;
 				else
 					next_state = S_CLR_SCREEN;
 				end
@@ -198,7 +217,7 @@ module control(
 			S_MOVING: begin
 				// check if the snake head touched a wall or itself
 				// need some way to check as the possible values
-				if (1'b0 && (in wall || in self))	// set to always be false for now
+				if (1'b0)	//&& (in wall || in self) // set to always be false for now
 					next_state = S_DEAD;
 				else if (snake_x[7:0] == apple_x[7:0] && snake_y[7:0] == {1'b0, apple_y[6:0]}) 	// check the snake head touched the apple
 					next_state = S_MUNCHING;
@@ -220,6 +239,8 @@ module control(
 		plot = 1'b0;
 		grow = 1'b0;
 		dead = 1'b0;
+		// start off as going left
+		direction = LEFT;
 		//direction = 2'b0; // don't wanna change direction constantly I guess
 
         case (current_state)
@@ -238,14 +259,14 @@ module control(
 			S_MOVING: begin
 				// not sure if these checks should be done only in moving state
 				// wondering if they'll register if you press the button at the wrong time
-				if (mv_left)
-					direction = 2'b00;
-				else if (mv_right)
-					direction = 2'b01;
-				else if (mv_down)
-					direction = 2'b10;
-				else if (mv_up)
-					direction = 2'b11;
+				if (mv_left && direction != RIGHT)
+					direction = LEFT;
+				else if (mv_right && direction != LEFT)
+					direction = LEFT;
+				else if (mv_down && direction != UP)
+					direction = UP;
+				else if (mv_up && direction != DOWN)
+					direction = DOWN;
 				end
 			S_MUNCHING: begin
 				grow = 1'b1;
@@ -253,18 +274,21 @@ module control(
 			S_DEAD: begin
 				dead = 1'b1;
 				end
-        // default:    // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
+        default: begin // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
+				plot = 1'b0;
+				grow = 1'b0;
+				dead = 1'b0;
+				direction = LEFT;
+				end
         endcase
     end // enable_signals
    
     // current_state registers
     always@(posedge clk)
     begin: state_FFs
+		prev_state <= current_state;
         current_state <= next_state;
     end // state_FFS
-	
-	// Output the current state to LEDs
-	assign curr_state = current_state;
 	
 endmodule
 	
@@ -272,28 +296,164 @@ module datapath(
 	input clk,
 	input [1:0] direction,
 	input grow, dead,
+	input [4:0] current_state, prev_state,
 	
-	output [14:0] counter,
+	output reg [14:0] counter,
 	
-	output [1023:0] snake_x,
-	output [1023:0] snake_y,
-	output [7:0] snake_size,
+	output reg [1023:0] snake_x,
+	output reg [1023:0] snake_y,
+	output reg [7:0] snake_size,
 	
-	output [7:0] apple_x,
-	output [6:0] apple_y,
+	output reg [7:0] apple_x,
+	output reg [6:0] apple_y,
 	
-	output [7:0] draw_x,
-	output [6:0] draw_y
+	output reg [2:0] colour,
+	output reg [7:0] draw_x,
+	output reg [6:0] draw_y
 	);
 
 
-	// Input logic based on grow / dead
-    always@(posedge clk) begin
-        if(grow)
-           
-        else if(dead)
-           
-        else
+	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
+				S_STARTING 		= 5'd1, // press start game button
+				S_STARTING_WAIT = 5'd2, // stop pressing start game button
+				S_LOAD_GAME		= 5'd3, // load initial snake pos, random walls
+				S_MAKE_APPLE	= 5'd4, // load apple position
+				S_CLR_SCREEN	= 5'd5, // clear the screen
+				S_DRAW_WALLS	= 5'd6, // redraw each part of the game
+				S_DRAW_APPLE	= 5'd7,
+				S_DRAW_SNAKE 	= 5'd8,
+				S_MOVING		= 5'd9, // take the next step in the game
+				S_MUNCHING		= 5'd10,
+				S_DEAD			= 5'd11,
+				S_SCORE_MENU	= 5'd12;
+
+	localparam 	LEFT = 2'b00,
+				RIGHT = 2'b01,
+				DOWN = 2'b10,
+				UP = 2'b11;
+
+	// Used for drawing the snake, gets initialized to actual values then shifted down by 8 bits to get to the next coord per counter tick 
+	reg [1023:0] snake_draw_x;
+	reg [1023:0] snake_draw_y;
+
+	 // Input logic
+    always @(posedge clk)
+    begin: enable_signals
+        // By default make all our signals 0
+		
+		// if the state has changed, reset the counter
+		if(prev_state != current_state)
+			begin
+			counter = 15'd0;
+			snake_draw_x = snake_x;
+			snake_draw_y = snake_y;
+			end
+
+        case (current_state)
+			S_MAIN_MENU: begin
+				end
+			S_STARTING: begin
+				end
+			S_STARTING_WAIT: begin
+				end
+			S_LOAD_GAME: begin
+				// setting snake head position
+				snake_x[7:0] = 8'd30;
+				snake_y[6:0] = 7'd20;
+				// positionally load random walls 
+				end
+			S_MAKE_APPLE: begin
+				// put random gen code here, static assignment for now
+				apple_x[7:0] = 8'd50;
+				apple_y[6:0] = 7'd50;
+				end
 			
-    end
+			S_CLR_SCREEN: begin
+				// set colour to black
+				colour = 3'b000;
+				// draw x / y for each value represented by the counter
+				draw_x = counter[7:0];
+				draw_y = counter[14:8]; 
+				counter = counter + 1'b1;
+				end
+			S_DRAW_WALLS: begin
+					// set colour to blue
+					colour = 3'b001;
+					// if the counter represents a value where the border wall should be drawn
+					if(counter[7:0] < 8'd2 || counter[7:0] > 8'd158 || counter[14:8] < 7'd2 || counter[14:8] > 7'd118)
+						begin
+						draw_x = counter[7:0];
+						draw_y = counter[14:8];
+						end
+					counter = counter + 1'b1;
+				end
+			S_DRAW_APPLE: begin
+				// set colour to red
+				colour = 3'b100;
+				draw_x = apple_x;
+				draw_y = apple_y;
+				end
+			S_DRAW_SNAKE: begin
+				// set colour to white
+				colour = 3'b111;
+				// draw the first values of the register
+				draw_x = snake_draw_x[7:0];
+				draw_y = snake_draw_y[6:0];
+				// shift by 8 bits to get the next snake block
+				snake_draw_x = snake_draw_x >> 8;
+				snake_draw_y = snake_draw_y >> 8;
+				counter = counter + 1'b1;
+				end
+			S_MOVING: begin
+				// not sure if these checks should be done only in moving state
+				// wondering if they'll register if you press the button at the wrong time
+				if (direction == LEFT)
+					begin
+					// move everything back one (lose the last saved coord)
+					snake_x = snake_x << 8;
+					snake_y = snake_y << 8;
+					// decrease the head's x coord by 1 to go left
+					snake_x[7:0] = snake_x[15:8] - 1'b1;
+					snake_y[7:0] = snake_y[15:8];
+					end
+				else if (direction == RIGHT)
+					begin
+					// move everything back one (lose the last saved coord)
+					snake_x = snake_x << 8;
+					snake_y = snake_y << 8;
+					// increase the head's x coord by 1 to go right
+					snake_x[7:0] = snake_x[15:8] + 1'b1;
+					snake_y[7:0] = snake_y[15:8];
+					end
+				else if (direction == DOWN)
+					begin
+					// move everything back one (lose the last saved coord)
+					snake_x = snake_x << 8;
+					snake_y = snake_y << 8;
+					// increase the head's y coord by 1 to go down
+					snake_x[7:0] = snake_x[15:8];
+					snake_y[7:0] = snake_y[15:8] + 1'b1;
+					end
+				else if (direction == UP)
+					begin
+					// move everything back one (lose the last saved coord)
+					snake_x = snake_x << 8;
+					snake_y = snake_y << 8;
+					// decrease the head's y coord by 1 to go up
+					snake_x[7:0] = snake_x[15:8];
+					snake_y[7:0] = snake_y[15:8] - 1'b1;
+					end
+				end
+			S_MUNCHING: begin
+					snake_size = snake_size + 1'b1;
+				end
+			S_DEAD: begin
+				// currently cant die
+				end
+			S_SCORE_MENU: begin
+				// scores not implemented
+				end
+        // default:    // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
+        endcase
+    end // enable_signals
 endmodule
