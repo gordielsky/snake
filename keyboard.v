@@ -10,9 +10,10 @@
     • RIGHT -> 8'b1000
 */
 
-module keyboard(mapped_key, kb_clock, kb_data);
+module keyboard(mapped_key, kb_clock, kb_data, LEDR);
     input kb_clock, kb_data;
     output [7:0] mapped_key;
+	 output [8:0] LEDR;
 
     // Codes
     reg [10:0] make_code;
@@ -26,20 +27,28 @@ module keyboard(mapped_key, kb_clock, kb_data);
     localparam ESCAPE = 8'hE0;
 
     always@(negedge kb_clock)
-    begin: input_detection
+    begin: input_detectionprev_scan_code = 
         make_code[counter] = kb_data;
         counter = counter + 1'd1;
         if (counter == KEY_BITS)
             begin
                 if (prev_scan_code == ESCAPE)
+						begin
                     scan_code <= {1'b1, make_code[8:1]}; // Exclude start, stop, and parity bits
+						  prev_scan_code <= make_code[8:1];
+						end
                 else if (prev_scan_code != ESCAPE && make_code[8:1] != ESCAPE)
+						begin
                     scan_code <= {1'b0, make_code[8:1]};
+						  prev_scan_code <= make_code[8:1];
+						end
                 else
                     prev_scan_code <= make_code[8:1];
                 counter = ZERO;
             end
     end
+	 
+	 assign LEDR[8:0] = scan_code;
 
     // 'data' input maps to specific scan codes (source: https://techdocs.altium.com/display/FPGA/PS2+Keyboard+Scan+Codes)
     // UP -> E075
@@ -55,10 +64,10 @@ module keyboard(mapped_key, kb_clock, kb_data);
             KEY_DOWN = {1'b1, 8'h72},
             KEY_LEFT = {1'b1, 8'h6B},
             KEY_RIGHT = {1'b1, 8'h74},
-            KEY_W = 9'h1D,
-            KEY_A = 9'h1C,
-            KEY_S = 9'h1B,
-            KEY_D = 9'h23;
+            KEY_W = {1'b0, 8'h1D},
+            KEY_A = {1'b0, 8'h1C},
+            KEY_S = {1'b0, 8'h1B},
+            KEY_D = {1'b0, 8'h23};
 
     localparam OUT_UP = 8'b0001,
             OUT_DOWN = 8'b0010,
