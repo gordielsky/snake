@@ -1,0 +1,10 @@
+
+
+/cmshome/levitsk5/CSCB58/snake/vga_adapter/vga_pll.v
+
+Mar 12 12PM:17:26>: Error in CNX file format.
+
+Error messages are listed in file
+/cmshome/levitsk5/CSCB58/snake/vga_adapter/vga_pll.cnxerr.
+
+Can't create the custom megafunction variation file(s)
