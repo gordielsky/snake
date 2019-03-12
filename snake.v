@@ -100,7 +100,7 @@ module snake(
 		.grow(grow),
 		.dead(dead),
 		.direction(direction),
-		.current_state(state),
+		.curr_state(state),
 		.prev_state(prev_state)
 		);
 		
@@ -157,34 +157,34 @@ module control(
 	output reg [1:0] direction,
 	// Current state (for testing purposes)
 	// Has extra bit so that space can be used if needed
-	output reg [4:0] current_state, prev_state
+	output [4:0] curr_state, prev_state
 	);
 	
-	reg [4:0] next_state; 
+	reg [4:0] previous_state, current_state, next_state; 
 	
 	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
-				S_STARTING 		= 5'd1, // press start game button
-				S_STARTING_WAIT = 5'd2, // stop pressing start game button
-				S_LOAD_GAME		= 5'd3, // load initial snake pos, random walls
-				S_MAKE_APPLE	= 5'd4, // load apple position
-				S_CLR_SCREEN	= 5'd5, // clear the screen
-				S_DRAW_WALLS	= 5'd6, // redraw each part of the game
-				S_DRAW_APPLE	= 5'd7,
-				S_DRAW_SNAKE 	= 5'd8,
-				S_MOVING		= 5'd9, // take the next step in the game
-				S_MUNCHING		= 5'd10,
-				S_DEAD			= 5'd11,
-				S_SCORE_MENU	= 5'd12;
+					S_STARTING 		= 5'd1, // press start game button
+					S_STARTING_WAIT= 5'd2, // stop pressing start game button
+					S_LOAD_GAME		= 5'd3, // load initial snake pos, random walls
+					S_MAKE_APPLE	= 5'd4, // load apple position
+					S_CLR_SCREEN	= 5'd5, // clear the screen
+					S_DRAW_WALLS	= 5'd6, // redraw each part of the game
+					S_DRAW_APPLE	= 5'd7,
+					S_DRAW_SNAKE 	= 5'd8,
+					S_MOVING			= 5'd9, // take the next step in the game
+					S_MUNCHING		= 5'd10,
+					S_DEAD			= 5'd11,
+					S_SCORE_MENU	= 5'd12;
 
 	localparam 	LEFT = 2'b00,
-				RIGHT = 2'b01,
-				DOWN = 2'b10,
-				UP = 2'b11;
+					RIGHT = 2'b01,
+					DOWN = 2'b10,
+					UP = 2'b11;
 
-	wire [15:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX;
+	wire [14:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX;
 	assign CLR_SCREEN_MAX = 15'd19_200; // 160 * 120
 	assign DRAW_WALLS_MAX = 15'd1_104; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
-	assign DRAW_SNAKE_MAX = {7'b0, snake_size};
+	assign DRAW_SNAKE_MAX = 15'd100;
     
     // Next state logic aka our state table
     always@(*)
@@ -243,7 +243,7 @@ module control(
 		direction = LEFT;
 		//direction = 2'b0; // don't wanna change direction constantly I guess
 
-        case (current_state)
+      case (current_state)
 			S_CLR_SCREEN: begin
 				plot = 1'b1;
 				end
@@ -280,15 +280,18 @@ module control(
 				dead = 1'b0;
 				direction = LEFT;
 				end
-        endcase
+      endcase
     end // enable_signals
    
     // current_state registers
     always@(posedge clk)
     begin: state_FFs
-		prev_state <= current_state;
+		previous_state <= current_state;
         current_state <= next_state;
     end // state_FFS
+	 
+	assign curr_state = current_state;
+	assign prev_state = previous_state;
 	
 endmodule
 	
@@ -357,9 +360,10 @@ module datapath(
 			S_STARTING_WAIT: begin
 				end
 			S_LOAD_GAME: begin
-				// setting snake head position
+				// initializing snake
 				snake_x[7:0] = 8'd30;
 				snake_y[6:0] = 7'd20;
+				snake_size = 8'd1;
 				// positionally load random walls 
 				end
 			S_MAKE_APPLE: begin
