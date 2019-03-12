@@ -1,7 +1,7 @@
 /* 
     Keyboard INPUT
-    • PS/2 Clock -> PS2_CLK
-    • PS/2 Data -> PS2_DAT
+    • PS/2 Clock -> PS2_KBCLK
+    • PS/2 Data -> PS2_KBDAT
 
     Keyboard OUTPUT (bit mapping)
     • UP -> 8'b0001
