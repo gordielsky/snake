@@ -4,7 +4,7 @@ module snake(
 	input CLOCK_50,
 	
 	output [17:0] LEDR,
-	output [6:0] HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, HEX6,
+	output [6:0] HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, HEX6, HEX7,
 	output VGA_CLK, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N,
 	output [9:0] VGA_R, VGA_G, VGA_B
 	);
@@ -40,10 +40,10 @@ module snake(
 	wire [7:0] apple_x;
 	wire [6:0] apple_y;
 	
-	wire [14:0] counter;
+	wire [27:0] counter;
 	
 	wire resetn;
-	
+	assign resetn = 1'b1;
 	
 	// current state of the game
 	wire [4:0] state;
@@ -51,13 +51,14 @@ module snake(
 	wire [4:0] prev_state;
 	// for debugging, show current state on leds
 	assign LEDR[4:0] = state;
+	assign LEDR[9] = mv_right;
 
 	// Create an Instance of a VGA controller - there can be only one!
 	// Define the number of colours as well as the initial background
 	// image file (.MIF) for the controller.
 	vga_adapter VGA(
 			.resetn(resetn),
-			.clock(CLOCK_50),
+			.clock(clk),
 			.colour(colour),
 			.x(x),
 			.y(y),
@@ -125,7 +126,63 @@ module snake(
 		.current_state(state),
 		.prev_state(prev_state)
 		);
+		
+	wire slow_clk;
+	wire [27:0] max_ticks;
+	assign max_ticks = 27'd50_000 - 1;
 	
+	rate_divider rate(
+		.enable(slow_clk),
+		.par_load(1'b0),
+		.max_ticks(max_ticks),
+		.clk(clk)
+		);
+//	clock hexs
+//	hex_display hex_0(
+//		.IN(counter[3:0]),
+//		.OUT(HEX0)
+//		);
+//	
+//	hex_display hex_1(
+//		.IN(counter[7:4]),
+//		.OUT(HEX1)
+//		);
+//	
+//	hex_display hex_2(
+//		.IN(counter[11:8]),
+//		.OUT(HEX2)
+//		);
+//	
+//	hex_display hex_3(
+//		.IN(counter[15:12]),
+//		.OUT(HEX3)
+//		);
+//	
+//	hex_display hex_4(
+//		.IN(counter[19:16]),
+//		.OUT(HEX4)
+//		);
+//	
+//	hex_display hex_5(
+//		.IN(counter[23:20]),
+//		.OUT(HEX5)
+//		);
+//	
+//	hex_display hex_6(
+//		.IN(counter[27:24]),
+//		.OUT(HEX6)
+//		);
+	
+// snake size hexs
+//	hex_display hex_0(
+//		.IN(snake_size[3:0]),
+//		.OUT(HEX0)
+//		);
+//	
+//	hex_display hex_1(
+//		.IN(snake_size[7:4]),
+//		.OUT(HEX1)
+//		);
 endmodule
 
 module control(
@@ -133,7 +190,7 @@ module control(
 	// Input to start game / move between menus
 	input press_button,
 	// Ticks spent in current state (log(160 * 120) bits)
-	input [14:0] counter,
+	input [27:0] counter,
 	// Direction inputs
 	input mv_left, mv_right, mv_down, mv_up,
 	// Snake position, 8 bits per coordinate (piece of snake) 
@@ -174,17 +231,19 @@ module control(
 					S_MOVING			= 5'd9, // take the next step in the game
 					S_MUNCHING		= 5'd10,
 					S_DEAD			= 5'd11,
-					S_SCORE_MENU	= 5'd12;
+					S_SCORE_MENU	= 5'd12,
+					S_DELAY			= 5'd13; // to make sure the game isn't too sonic speedy
 
-	localparam 	LEFT = 2'b00,
+	localparam 	LEFT 	= 2'b00,
 					RIGHT = 2'b01,
-					DOWN = 2'b10,
-					UP = 2'b11;
+					DOWN 	= 2'b10,
+					UP 	= 2'b11;
 
-	wire [14:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX;
-	assign CLR_SCREEN_MAX = 15'd19_200; // 160 * 120
-	assign DRAW_WALLS_MAX = 15'd1_104; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
-	assign DRAW_SNAKE_MAX = 15'd100;
+	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX, DELAY_MAX;
+	assign CLR_SCREEN_MAX = 28'd32_000; // 160 * 120
+	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
+	assign DRAW_SNAKE_MAX = snake_size;
+	assign DELAY_MAX = 28'd10_000_000 - 1;
     
     // Next state logic aka our state table
     always@(*)
@@ -210,9 +269,15 @@ module control(
 			S_DRAW_APPLE: next_state = S_DRAW_SNAKE;
 			S_DRAW_SNAKE: begin
 				if (counter == DRAW_SNAKE_MAX)
-					next_state = S_MOVING;
+					next_state = S_DELAY;
 				else
 					next_state = S_DRAW_SNAKE;
+				end
+			S_DELAY: begin
+				if (counter == DELAY_MAX)
+					next_state = S_MOVING;
+				else
+					next_state = S_DELAY;
 				end
 			S_MOVING: begin
 				// check if the snake head touched a wall or itself
@@ -240,7 +305,7 @@ module control(
 		grow = 1'b0;
 		dead = 1'b0;
 		// start off as going left
-		direction = LEFT;
+		//direction = RIGHT;
 		//direction = 2'b0; // don't wanna change direction constantly I guess
 
       case (current_state)
@@ -262,11 +327,11 @@ module control(
 				if (mv_left && direction != RIGHT)
 					direction = LEFT;
 				else if (mv_right && direction != LEFT)
-					direction = LEFT;
+					direction = RIGHT;
 				else if (mv_down && direction != UP)
-					direction = UP;
-				else if (mv_up && direction != DOWN)
 					direction = DOWN;
+				else if (mv_up && direction != DOWN)
+					direction = UP;
 				end
 			S_MUNCHING: begin
 				grow = 1'b1;
@@ -278,7 +343,7 @@ module control(
 				plot = 1'b0;
 				grow = 1'b0;
 				dead = 1'b0;
-				direction = LEFT;
+				//direction = RIGHT;
 				end
       endcase
     end // enable_signals
@@ -301,7 +366,7 @@ module datapath(
 	input grow, dead,
 	input [4:0] current_state, prev_state,
 	
-	output reg [14:0] counter,
+	output reg [27:0] counter,
 	
 	output reg [1023:0] snake_x,
 	output reg [1023:0] snake_y,
@@ -316,24 +381,25 @@ module datapath(
 	);
 
 
-	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
-				S_STARTING 		= 5'd1, // press start game button
-				S_STARTING_WAIT = 5'd2, // stop pressing start game button
-				S_LOAD_GAME		= 5'd3, // load initial snake pos, random walls
-				S_MAKE_APPLE	= 5'd4, // load apple position
-				S_CLR_SCREEN	= 5'd5, // clear the screen
-				S_DRAW_WALLS	= 5'd6, // redraw each part of the game
-				S_DRAW_APPLE	= 5'd7,
-				S_DRAW_SNAKE 	= 5'd8,
-				S_MOVING		= 5'd9, // take the next step in the game
-				S_MUNCHING		= 5'd10,
-				S_DEAD			= 5'd11,
-				S_SCORE_MENU	= 5'd12;
+	localparam 	S_MAIN_MENU = 5'd0, // menu state
+					S_STARTING 		= 5'd1, // press start game button
+					S_STARTING_WAIT= 5'd2, // stop pressing start game button
+					S_LOAD_GAME		= 5'd3, // load initial snake pos, random walls
+					S_MAKE_APPLE	= 5'd4, // load apple position
+					S_CLR_SCREEN	= 5'd5, // clear the screen
+					S_DRAW_WALLS	= 5'd6, // redraw each part of the game
+					S_DRAW_APPLE	= 5'd7,
+					S_DRAW_SNAKE 	= 5'd8,
+					S_MOVING			= 5'd9, // take the next step in the game
+					S_MUNCHING		= 5'd10,
+					S_DEAD			= 5'd11,
+					S_SCORE_MENU	= 5'd12,
+					S_DELAY			= 5'd13;
 
-	localparam 	LEFT = 2'b00,
-				RIGHT = 2'b01,
-				DOWN = 2'b10,
-				UP = 2'b11;
+	localparam 	LEFT 	= 2'b00,
+					RIGHT	= 2'b01,
+					DOWN 	= 2'b10,
+					UP 	= 2'b11;
 
 	// Used for drawing the snake, gets initialized to actual values then shifted down by 8 bits to get to the next coord per counter tick 
 	reg [1023:0] snake_draw_x;
@@ -347,7 +413,7 @@ module datapath(
 		// if the state has changed, reset the counter
 		if(prev_state != current_state)
 			begin
-			counter = 15'd0;
+			counter = 28'd0;
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
 			end
@@ -374,20 +440,20 @@ module datapath(
 			
 			S_CLR_SCREEN: begin
 				// set colour to black
-				colour = 3'b000;
+				colour = 3'b101;
 				// draw x / y for each value represented by the counter
-				draw_x = counter[7:0];
-				draw_y = counter[14:8]; 
+				draw_x = counter[14:7];
+				draw_y = counter[6:0]; 
 				counter = counter + 1'b1;
 				end
 			S_DRAW_WALLS: begin
 					// set colour to blue
 					colour = 3'b001;
 					// if the counter represents a value where the border wall should be drawn
-					if(counter[7:0] < 8'd2 || counter[7:0] > 8'd158 || counter[14:8] < 7'd2 || counter[14:8] > 7'd118)
+					if(counter[14:7] < 8'd2 || counter[14:7] > 8'd158 || counter[6:0] < 7'd2 || counter[6:0] > 7'd118)
 						begin
-						draw_x = counter[7:0];
-						draw_y = counter[14:8];
+						draw_x = counter[14:7];
+						draw_y = counter[6:0];
 						end
 					counter = counter + 1'b1;
 				end
@@ -406,6 +472,9 @@ module datapath(
 				// shift by 8 bits to get the next snake block
 				snake_draw_x = snake_draw_x >> 8;
 				snake_draw_y = snake_draw_y >> 8;
+				counter = counter + 1'b1;
+				end
+			S_DELAY: begin
 				counter = counter + 1'b1;
 				end
 			S_MOVING: begin
