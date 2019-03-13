@@ -3,6 +3,9 @@ module snake(
 	input [3:0] KEY,
 	input CLOCK_50,
 	
+	input PS2_KBCLK,
+	input PS2_KBDAT,
+	
 	output [17:0] LEDR,
 	output [6:0] HEX0, HEX1, HEX2, HEX3, HEX4, HEX5, HEX6, HEX7,
 	output VGA_CLK, VGA_HS, VGA_VS, VGA_BLANK_N, VGA_SYNC_N,
@@ -14,16 +17,25 @@ module snake(
 	wire [6:0] y;
 	wire plot;
 	
+	// Keyboard input
+	wire [7:0] key_input;
+	
 	wire clk;
 	assign clk = CLOCK_50;
 	
 	// Directional buttons currently being pressed
 	wire mv_left, mv_right, mv_down, mv_up;
 	// Assign to keys until keyboard :)
-	assign mv_left = ~KEY[3];
-	assign mv_right = ~KEY[0];
-	assign mv_down = ~KEY[2];
-	assign mv_up = ~KEY[1];
+//	assign mv_left = ~KEY[3];
+//	assign mv_right = ~KEY[0];
+//	assign mv_down = ~KEY[2];
+//	assign mv_up = ~KEY[1];
+	
+	assign mv_left = key_input[2];
+	assign mv_right = key_input[3];
+	assign mv_down = key_input[1];
+	assign mv_up = key_input[0];
+	
 	
 	// Any button is being pressed to start the game
 	wire press_button;
@@ -42,6 +54,7 @@ module snake(
 	
 	wire [27:0] counter;
 	
+	
 	wire resetn;
 	assign resetn = 1'b1;
 	
@@ -52,6 +65,8 @@ module snake(
 	// for debugging, show current state on leds
 	assign LEDR[4:0] = state;
 	assign LEDR[9] = mv_right;
+	
+	wire [7:0] random_out;
 
 	// Create an Instance of a VGA controller - there can be only one!
 	// Define the number of colours as well as the initial background
@@ -75,8 +90,13 @@ module snake(
 		defparam VGA.RESOLUTION = "160x120";
 		defparam VGA.MONOCHROME = "FALSE";
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
-		defparam VGA.BACKGROUND_IMAGE = "black.mif";
+		defparam VGA.BACKGROUND_IMAGE = "title_screen.colour.mif";
 	
+	keyboard kb(
+		.mapped_key(key_input[7:0]),
+		.kb_clock(PS2_KBCLK),
+		.kb_data(PS2_KBDAT)
+	);
 	
 	// Create the control and datapath
 	control c0(
@@ -110,6 +130,7 @@ module snake(
 		.direction(direction),
 		.grow(grow),
 		.dead(dead),
+		.random_in(random_out),
 		
 		.counter(counter),
 		
@@ -137,12 +158,18 @@ module snake(
 		.max_ticks(max_ticks),
 		.clk(clk)
 		);
+	
+	random random(
+		.clock(CLOCK_50),
+		.max_number(8'd100),
+		.num_out(random_out)
+	);
 //	clock hexs
 //	hex_display hex_0(
 //		.IN(counter[3:0]),
 //		.OUT(HEX0)
 //		);
-//	
+//
 //	hex_display hex_1(
 //		.IN(counter[7:4]),
 //		.OUT(HEX1)
@@ -183,6 +210,27 @@ module snake(
 //		.IN(snake_size[7:4]),
 //		.OUT(HEX1)
 //		);
+
+	hex_display hex_0(
+		.IN(apple_x[3:0]),
+		.OUT(HEX0)
+		);
+
+	hex_display hex_1(
+		.IN(apple_x[7:4]),
+		.OUT(HEX1)
+		);
+
+	hex_display hex_2(
+		.IN(apple_y[3:0]),
+		.OUT(HEX2)
+		);
+
+	hex_display hex_3(
+		.IN({1'b0, apple_y[6:4]}),
+		.OUT(HEX3)
+		);
+		
 endmodule
 
 module control(
@@ -232,7 +280,9 @@ module control(
 					S_MUNCHING		= 5'd10,
 					S_DEAD			= 5'd11,
 					S_SCORE_MENU	= 5'd12,
-					S_DELAY			= 5'd13; // to make sure the game isn't too sonic speedy
+					S_DELAY			= 5'd13, // to make sure the game isn't too sonic speedy
+					S_MAKE_APPLE_X = 5'd14, // load apple X
+					S_MAKE_APPLE_Y = 5'd15; // load apply Y
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT = 2'b01,
@@ -252,8 +302,9 @@ module control(
 			S_MAIN_MENU: next_state = press_button ? S_STARTING : S_MAIN_MENU; // Stay on menu until start game
 			S_STARTING: next_state = press_button ? S_STARTING_WAIT : S_STARTING; // Stay on starting while button is held
 			S_STARTING_WAIT: next_state = press_button ? S_STARTING_WAIT : S_LOAD_GAME; // Switch to game when start game button is released
-			S_LOAD_GAME: next_state = S_MAKE_APPLE;
-			S_MAKE_APPLE: next_state = S_CLR_SCREEN;
+			S_LOAD_GAME: next_state = S_MAKE_APPLE_X;
+			S_MAKE_APPLE_X: next_state = S_MAKE_APPLE_Y;
+			S_MAKE_APPLE_Y: next_state = S_CLR_SCREEN;
 			S_CLR_SCREEN: begin
 				if (counter == CLR_SCREEN_MAX)
 					next_state = S_DRAW_WALLS;
@@ -273,7 +324,7 @@ module control(
 				else
 					next_state = S_DRAW_SNAKE;
 				end
-			S_DELAY: begin
+			S_DELAY: begin			
 				if (counter == DELAY_MAX)
 					next_state = S_MOVING;
 				else
@@ -289,7 +340,7 @@ module control(
 				else
 					next_state = S_CLR_SCREEN;
 				end
-			S_MUNCHING: next_state = S_MAKE_APPLE;
+			S_MUNCHING: next_state = S_MAKE_APPLE_X;
 			S_DEAD: next_state = S_SCORE_MENU;
 			S_SCORE_MENU: next_state = press_button ? S_STARTING : S_SCORE_MENU; // Stay on menu until restart game
 			default:     next_state = S_MAIN_MENU;
@@ -365,6 +416,7 @@ module datapath(
 	input [1:0] direction,
 	input grow, dead,
 	input [4:0] current_state, prev_state,
+	input [7:0] random_in,
 	
 	output reg [27:0] counter,
 	
@@ -394,7 +446,9 @@ module datapath(
 					S_MUNCHING		= 5'd10,
 					S_DEAD			= 5'd11,
 					S_SCORE_MENU	= 5'd12,
-					S_DELAY			= 5'd13;
+					S_DELAY			= 5'd13,
+					S_MAKE_APPLE_X = 5'd14,
+					S_MAKE_APPLE_Y = 5'd15;
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT	= 2'b01,
@@ -432,15 +486,17 @@ module datapath(
 				snake_size = 8'd1;
 				// positionally load random walls 
 				end
-			S_MAKE_APPLE: begin
-				// put random gen code here, static assignment for now
-				apple_x[7:0] = 8'd50;
-				apple_y[6:0] = 7'd50;
+			S_MAKE_APPLE_X: begin
+				apple_x[7:0] <= random_in[7:0] + 8'd8;
 				end
+				
+			S_MAKE_APPLE_Y: begin
+				apple_y[6:0] <= random_in[6:0] + 7'd8;
+			end
 			
 			S_CLR_SCREEN: begin
 				// set colour to black
-				colour = 3'b101;
+				colour = 3'b000;
 				// draw x / y for each value represented by the counter
 				draw_x = counter[14:7];
 				draw_y = counter[6:0]; 

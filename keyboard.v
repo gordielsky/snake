@@ -27,7 +27,7 @@ module keyboard(mapped_key, kb_clock, kb_data, LEDR);
     localparam ESCAPE = 8'hE0;
 
     always@(negedge kb_clock)
-    begin: input_detectionprev_scan_code = 
+    begin: input_detection
         make_code[counter] = kb_data;
         counter = counter + 1'd1;
         if (counter == KEY_BITS)
@@ -56,7 +56,7 @@ module keyboard(mapped_key, kb_clock, kb_data, LEDR);
     // LEFT -> E06B
     // RIGHT -> E074
     // W -> 1D
-    // A -> 1C
+    // A -> 1Cprev_scan_code = 
     // S -> 1B
     // D -> 23
 
