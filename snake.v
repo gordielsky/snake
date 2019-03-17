@@ -51,12 +51,13 @@ module snake(
 	wire [7:0] snake_size;
 	wire [7:0] apple_x;
 	wire [6:0] apple_y;
-	
+	wire collsion; // keeps track of whether the snake has collided with anything or not
+
 	wire [27:0] counter;
 	
 	
 	wire resetn;
-	assign resetn = 1'b1;
+	assign resetn = 1'b1; // vga reset is active low -> to have reset always off we set this to 1
 	
 	// current state of the game
 	wire [4:0] state;
@@ -117,6 +118,8 @@ module snake(
 		.apple_x(apple_x),
 		.apple_y(apple_y),
 		
+		.collision(collision),
+
 		.plot(plot),
 		.grow(grow),
 		.dead(dead),
@@ -145,7 +148,9 @@ module snake(
 		.draw_y(y),
 		.colour(colour),
 		.current_state(state),
-		.prev_state(prev_state)
+		.prev_state(prev_state),
+
+		.collision(collision)
 		);
 		
 	wire slow_clk;
@@ -250,6 +255,9 @@ module control(
 	// Apple position
 	input [7:0] apple_x,
 	input [6:0] apple_y,
+	// information from datapath on whether the snake has collided with anything (death)
+	input collision,
+
 	// Randomly generated wall positions
 	//input [num_random_walls * 8:0] wall_x,
 	//input [num_random_walls * 8:0] wall_y,
@@ -283,16 +291,18 @@ module control(
 					S_DELAY			= 5'd13, // to make sure the game isn't too sonic speedy
 					S_MAKE_APPLE_X = 5'd14, // load apple X
 					S_MAKE_APPLE_Y = 5'd15; // load apply Y
+					S_COLLISION_CHECK = 5'd16; // check if the snake is colliding with the walls or itself
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT = 2'b01,
 					DOWN 	= 2'b10,
 					UP 	= 2'b11;
 
-	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX, DELAY_MAX;
+	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX, DELAY_MAX, COLLISION_MAX;
 	assign CLR_SCREEN_MAX = 28'd32_000; // 160 * 120
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
+	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
 	assign DELAY_MAX = 28'd10_000_000 - 1;
     
     // Next state logic aka our state table
@@ -326,14 +336,20 @@ module control(
 				end
 			S_DELAY: begin			
 				if (counter == DELAY_MAX)
-					next_state = S_MOVING;
+					next_state = S_COLLISION_CHECK;
 				else
 					next_state = S_DELAY;
+				end
+			S_COLLISION_CHECK: begin
+				if (counter == COLLISION_MAX)
+					next_state = S_MOVING;
+				else
+					next_state = S_COLLISION_CHECK;
 				end
 			S_MOVING: begin
 				// check if the snake head touched a wall or itself
 				// need some way to check as the possible values
-				if (1'b0)	//&& (in wall || in self) // set to always be false for now
+				if (collision)	// if there is a collision, the snake dies
 					next_state = S_DEAD;
 				else if (snake_x[7:0] == apple_x[7:0] && snake_y[7:0] == {1'b0, apple_y[6:0]}) 	// check the snake head touched the apple
 					next_state = S_MUNCHING;
@@ -389,6 +405,7 @@ module control(
 				end
 			S_DEAD: begin
 				dead = 1'b1;
+				plot = 1'b1;
 				end
         default: begin // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
 				plot = 1'b0;
@@ -429,7 +446,9 @@ module datapath(
 	
 	output reg [2:0] colour,
 	output reg [7:0] draw_x,
-	output reg [6:0] draw_y
+	output reg [6:0] draw_y,
+
+	output reg collision
 	);
 
 
@@ -449,6 +468,7 @@ module datapath(
 					S_DELAY			= 5'd13,
 					S_MAKE_APPLE_X = 5'd14,
 					S_MAKE_APPLE_Y = 5'd15;
+					S_COLLISION_CHECK = 5'd16; // check if snaking is colliding with walls / itself
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT	= 2'b01,
@@ -464,12 +484,13 @@ module datapath(
     begin: enable_signals
         // By default make all our signals 0
 		
-		// if the state has changed, reset the counter
+		// if the state has changed, reset the counter, collision and copies of snake position 
 		if(prev_state != current_state)
 			begin
 			counter = 28'd0;
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
+			collision = 1'b0;
 			end
 
         case (current_state)
@@ -505,8 +526,8 @@ module datapath(
 			S_DRAW_WALLS: begin
 					// set colour to blue
 					colour = 3'b001;
-					// if the counter represents a value where the border wall should be drawn
-					if(counter[14:7] < 8'd2 || counter[14:7] > 8'd158 || counter[6:0] < 7'd2 || counter[6:0] > 7'd118)
+					// if the counter represents a value where the border wall should be drawn (right side stops at pixel 120)
+					if(counter[14:7] < 8'd2 || counter[14:7] > 8'd119 || counter[6:0] < 7'd2 || counter[6:0] > 7'd117)
 						begin
 						draw_x = counter[14:7];
 						draw_y = counter[6:0];
@@ -576,8 +597,41 @@ module datapath(
 			S_MUNCHING: begin
 					snake_size = snake_size + 1'b1;
 				end
+
+			S_COLLISION_CHECK: begin
+					// check if the snake is colliding with itself
+					if(counter < snake_size)
+					begin
+						// if some part of the snake that is not the head is in the same position as the head, there is a collision
+						if(snake_x[7:0] == snake_draw_x[7:0] && snake_y[7:0] == snake_draw_y[7:0] && counter != 0)
+							collision = 1'b1;
+
+						// shift to the next part of the snake
+						snake_draw_x >> 8;
+						snake_draw_y >> 8;
+						
+					end
+					// check if the snake is colliding with the walls
+					else
+					begin
+						// if the snake makes contact with the predetermined walls, there is a collision
+						if(snake_x[7:0] < 8'd2 || snake_x[7:0] > 8'd119 || snake_y[7:0] < 8'd2 || snake_y[7:0] > 8'd117)
+							collision = 1'b1;
+					end
+
+					/**
+					To perform collision checking on non-predetermined walls, write similiar code to well checking for whether the snake collides
+					with itself or not. Have all x / y coords of the walls in a register, shift through the register and check one by one for collision, do this while the counter is less than the number of wall pieces that need to be checked.
+					**/
+
+					counter = counter + 1;
+				end
 			S_DEAD: begin
-				// currently cant die
+				// test code to see if the player actually dies on collision, should draw a green dot at (0, 0)
+				colour = 3'b010;
+				draw_x = 8'b0;
+				draw_y = 7'b0;
+
 				end
 			S_SCORE_MENU: begin
 				// scores not implemented
