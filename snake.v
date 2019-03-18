@@ -290,7 +290,7 @@ module control(
 					S_SCORE_MENU	= 5'd12,
 					S_DELAY			= 5'd13, // to make sure the game isn't too sonic speedy
 					S_MAKE_APPLE_X = 5'd14, // load apple X
-					S_MAKE_APPLE_Y = 5'd15; // load apply Y
+					S_MAKE_APPLE_Y = 5'd15, // load apply Y
 					S_COLLISION_CHECK = 5'd16; // check if the snake is colliding with the walls or itself
 
 	localparam 	LEFT 	= 2'b00,
@@ -303,7 +303,12 @@ module control(
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
 	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
-	assign DELAY_MAX = 28'd10_000_000 - 1;
+	delay_calc delayer(
+		.snake_size(snake_size),
+		.base_ticks(28'd10_000_000 - 1),
+		.delay_max(DELAY_MAX)
+		);
+	//assign DELAY_MAX = 28'd10_000_000 - 1;
     
     // Next state logic aka our state table
     always@(*)
@@ -467,7 +472,7 @@ module datapath(
 					S_SCORE_MENU	= 5'd12,
 					S_DELAY			= 5'd13,
 					S_MAKE_APPLE_X = 5'd14,
-					S_MAKE_APPLE_Y = 5'd15;
+					S_MAKE_APPLE_Y = 5'd15,
 					S_COLLISION_CHECK = 5'd16; // check if snaking is colliding with walls / itself
 
 	localparam 	LEFT 	= 2'b00,
@@ -475,21 +480,27 @@ module datapath(
 					DOWN 	= 2'b10,
 					UP 	= 2'b11;
 
+	// Used for assigning colour to each piece of the snake
+	reg [383:0] snake_colour;
+	reg [17:0] rainbow_order;
+	
 	// Used for drawing the snake, gets initialized to actual values then shifted down by 8 bits to get to the next coord per counter tick 
 	reg [1023:0] snake_draw_x;
 	reg [1023:0] snake_draw_y;
+	reg [383:0] snake_draw_colour;
 
 	 // Input logic
     always @(posedge clk)
     begin: enable_signals
         // By default make all our signals 0
 		
-		// if the state has changed, reset the counter, collision and copies of snake position 
+		// if the state has changed, reset the counter, collision and copies of snake information 
 		if(prev_state != current_state)
 			begin
 			counter = 28'd0;
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
+			snake_draw_colour = snake_colour;
 			collision = 1'b0;
 			end
 
@@ -501,10 +512,22 @@ module datapath(
 			S_STARTING_WAIT: begin
 				end
 			S_LOAD_GAME: begin
-				// initializing snake
+				// initializing snake position
 				snake_x[7:0] = 8'd30;
 				snake_y[6:0] = 7'd20;
-				snake_size = 8'd1;
+				snake_x[15:8] = 8'd31;
+				snake_y[14:8] = 7'd20;
+				snake_x[23:16] = 8'd32;
+				snake_y[22:16] = 7'd20;
+				snake_x[31:24] = 8'd33;
+				snake_y[30:24] = 7'd20;
+				snake_x[39:32] = 8'd34;
+				snake_y[38:32] = 7'd20;
+				
+				// initializing snake colour and size
+				rainbow_order = 18'b101_001_011_010_110_100;
+				snake_colour[14:0] = rainbow_order[14:0];
+				snake_size = 8'd5;
 				// positionally load random walls 
 				end
 			S_MAKE_APPLE_X: begin
@@ -541,14 +564,15 @@ module datapath(
 				draw_y = apple_y;
 				end
 			S_DRAW_SNAKE: begin
-				// set colour to white
-				colour = 3'b111;
+				// set colour to the snake's intended colour
+				colour = snake_draw_colour[2:0];
 				// draw the first values of the register
 				draw_x = snake_draw_x[7:0];
 				draw_y = snake_draw_y[6:0];
-				// shift by 8 bits to get the next snake block
+				// shift  bits to get the next snake block
 				snake_draw_x = snake_draw_x >> 8;
 				snake_draw_y = snake_draw_y >> 8;
+				snake_draw_colour = snake_draw_colour >> 3;
 				counter = counter + 1'b1;
 				end
 			S_DELAY: begin
@@ -595,7 +619,13 @@ module datapath(
 					end
 				end
 			S_MUNCHING: begin
-					snake_size = snake_size + 1'b1;
+				// update the size of the snake and the colour of the new head
+				snake_size = snake_size + 1'b1;
+				// get the next colour from the rainbow order and update the rainbow order
+				snake_colour = snake_colour << 3;
+				snake_colour[2:0] = rainbow_order[2:0];
+				rainbow_order = rainbow_order >> 3;
+				rainbow_order[17:15] = snake_colour[2:0];
 				end
 
 			S_COLLISION_CHECK: begin
@@ -607,8 +637,8 @@ module datapath(
 							collision = 1'b1;
 
 						// shift to the next part of the snake
-						snake_draw_x >> 8;
-						snake_draw_y >> 8;
+						snake_draw_x = snake_draw_x >> 8;
+						snake_draw_y = snake_draw_y >> 8;
 						
 					end
 					// check if the snake is colliding with the walls
