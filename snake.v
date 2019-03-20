@@ -304,7 +304,7 @@ module control(
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
 	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
-	assign DRAW_SCORE_MAX = 210;
+	assign DRAW_SCORE_MAX = 210 + 90;
 	delay_calc delayer(
 		.snake_size(snake_size),
 		.base_ticks(28'd8_000_000 - 1),
@@ -502,6 +502,7 @@ module datapath(
 	reg [383:0] snake_draw_colour;
 	// For drawing score;
 	reg [7:0] x,y;
+	reg [7:0] x_offset, y_offset, width;
 
 	 // Input logic
     always @(posedge clk)
@@ -515,7 +516,9 @@ module datapath(
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
 			snake_draw_colour = snake_colour;
-			score_text = score_text_wire;
+			score_info = {score_text_wire, score_num_wire};
+//			score_text = score_text_wire;
+//			score_num = score_num_wire;
 			//collision = 1'b0;
 			end
 
@@ -543,7 +546,7 @@ module datapath(
 				snake_y[1023:39] = 0;
 				
 				// initializing snake colour and size
-				rainbow_order = 18'b100_110_010_011_101;
+				rainbow_order = 15'b100_110_010_011_101;
 				snake_colour[2:0] = rainbow_order[14:12];
 				snake_colour[5:3] = rainbow_order[11:9];
 				snake_colour[8:6] = rainbow_order[8:6];
@@ -584,36 +587,49 @@ module datapath(
 				counter = counter + 1'b1;
 				end
 			S_DRAW_WALLS: begin
-					// set colour to blue
-					colour = 3'b001;
-					// if the counter represents a value where the border wall should be drawn (right side stops at pixel 120)
-					if(counter[14:7] < 8'd2 || counter[14:7] > 8'd119 || counter[6:0] < 7'd2 || counter[6:0] > 7'd117)
-						begin
-						draw_x = counter[14:7];
-						draw_y = counter[6:0];
-						end
-					counter = counter + 1'b1;
+				// set colour to blue
+				colour = 3'b001;
+				// if the counter represents a value where the border wall should be drawn (right side stops at pixel 120)
+				if(counter[14:7] < 8'd2 || counter[14:7] > 8'd119 || counter[6:0] < 7'd2 || counter[6:0] > 7'd117)
+					begin
+					draw_x = counter[14:7];
+					draw_y = counter[6:0];
+					end
+				counter = counter + 1'b1;
 				end
 			S_DRAW_SCORE: begin
-				if (counter == 0)
+				if (counter == 0 || counter == 210)
 				begin
 					x = 0;
 					y = 0;
 				end
-				if (x == 34)
+		
+				if (counter < 210)
+				begin
+					width = 35;
+					x_offset = 0;
+					y_offset = 0;
+				end
+				else
+				begin
+					width = 18;
+					x_offset = 10;
+					y_offset = 10;
+				end
+				if (x == width - 1)
 				begin
 					x = 0;
 					y = y + 1;
 				end
 				else
 					x = x + 1;
-				colour = 3'b011;
-				if(score_text[0] == 1)
+				colour = 3'b110;
+				if(score_info[0] == 1)
 				begin
-					draw_x = 122 + x;
-					draw_y = 15 +y;
+					draw_x = 122 + x_offset + x;
+					draw_y = 15 + y_offset + y;
 				end
-				score_text = score_text >> 1;
+				score_info = score_info >> 1;
 				counter = counter + 1'b1;
 				
 				end
@@ -689,32 +705,32 @@ module datapath(
 				end
 
 			S_COLLISION_CHECK: begin
-					// check if the snake is colliding with itself
-					if(counter < snake_size)
-					begin
-						// if some part of the snake that is not the head is in the same position as the head, there is a collision
-						if(snake_x[7:0] == snake_draw_x[7:0] && snake_y[7:0] == snake_draw_y[7:0] && counter != 0)
-							collision = 1'b1;
+				// check if the snake is colliding with itself
+				if(counter < snake_size)
+				begin
+					// if some part of the snake that is not the head is in the same position as the head, there is a collision
+					if(snake_x[7:0] == snake_draw_x[7:0] && snake_y[7:0] == snake_draw_y[7:0] && counter != 0)
+						collision = 1'b1;
 
-						// shift to the next part of the snake
-						snake_draw_x = snake_draw_x >> 8;
-						snake_draw_y = snake_draw_y >> 8;
-						
-					end
-					// check if the snake is colliding with the walls
-					else
-					begin
-						// if the snake makes contact with the predetermined walls, there is a collision
-						if(snake_x[7:0] < 8'd2 || snake_x[7:0] > 8'd119 || snake_y[7:0] < 8'd2 || snake_y[7:0] > 8'd117)
-							collision = 1'b1;
-					end
+					// shift to the next part of the snake
+					snake_draw_x = snake_draw_x >> 8;
+					snake_draw_y = snake_draw_y >> 8;
+					
+				end
+				// check if the snake is colliding with the walls
+				else
+				begin
+					// if the snake makes contact with the predetermined walls, there is a collision
+					if(snake_x[7:0] < 8'd2 || snake_x[7:0] > 8'd119 || snake_y[7:0] < 8'd2 || snake_y[7:0] > 8'd117)
+						collision = 1'b1;
+				end
 
-					/**
-					To perform collision checking on non-predetermined walls, write similiar code to well checking for whether the snake collides
-					with itself or not. Have all x / y coords of the walls in a register, shift through the register and check one by one for collision, do this while the counter is less than the number of wall pieces that need to be checked.
-					**/
+				/**
+				To perform collision checking on non-predetermined walls, write similiar code to well checking for whether the snake collides
+				with itself or not. Have all x / y coords of the walls in a register, shift through the register and check one by one for collision, do this while the counter is less than the number of wall pieces that need to be checked.
+				**/
 
-					counter = counter + 1;
+				counter = counter + 1;
 				end
 			S_DEAD: begin
 
@@ -726,9 +742,16 @@ module datapath(
         endcase
     end // enable_signals
 	 
+	 reg [299:0] score_info;
+	 
 	 wire [209:0] score_text_wire;
-	 reg [209:0] score_text;
 	 score_text score_text_module(
 		.OUT(score_text_wire)
+		);
+	
+	 wire [89:0] score_num_wire;
+	 score_to_display score_to_display_module(
+		.score_display(score_num_wire),
+		.score_input(snake_size)
 		);
 endmodule
