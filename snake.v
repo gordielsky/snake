@@ -55,7 +55,6 @@ module snake(
 
 	wire [27:0] counter;
 	
-	
 	wire resetn;
 	assign resetn = 1'b1; // vga reset is active low -> to have reset always off we set this to 1
 	
@@ -133,6 +132,8 @@ module snake(
 		.grow(grow),
 		.dead(dead),
 		.random_in(random_out),
+		
+		.LEDR(LEDR[17:5]),
 		
 		.counter(counter),
 		
@@ -451,6 +452,8 @@ module datapath(
 	input [4:0] current_state, prev_state,
 	input [13:0] random_in,
 	
+	output [12:0] LEDR,
+	
 	output reg [27:0] counter,
 	
 	output reg [1023:0] snake_x,
@@ -516,7 +519,7 @@ module datapath(
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
 			snake_draw_colour = snake_colour;
-			score_info = {score_text_wire, score_num_wire};
+			score_info = {score_num_wire, score_text_wire};
 //			score_text = score_text_wire;
 //			score_num = score_num_wire;
 			//collision = 1'b0;
@@ -598,24 +601,48 @@ module datapath(
 				counter = counter + 1'b1;
 				end
 			S_DRAW_SCORE: begin
-				if (counter == 0 || counter == 210)
+				if (counter == 0 || counter == 210 || counter == 240 || counter == 270)
 				begin
 					x = 0;
 					y = 0;
 				end
-		
+				
+				// setting the width and position of the thing currently being drawn
 				if (counter < 210)
 				begin
 					width = 35;
 					x_offset = 0;
 					y_offset = 0;
 				end
-				else
+				// drawing each digit individually
+				else if (counter < 240)
 				begin
-					width = 18;
+					width = 6;
 					x_offset = 10;
 					y_offset = 10;
 				end
+				else if (counter < 270)
+				begin
+					width = 6;
+					x_offset = 16;
+					y_offset = 10;
+				end
+				else
+				begin
+					width = 6;
+					x_offset = 22;
+					y_offset = 10;
+				end
+				
+				// draw the current information at the calculated position in yellow
+				colour = 3'b110;
+				if(score_info[0] == 1)
+				begin
+					draw_x = 122 + x_offset + x;
+					draw_y = 15 + y_offset + y;
+				end
+				
+				// set the position of the next pixel
 				if (x == width - 1)
 				begin
 					x = 0;
@@ -623,12 +650,8 @@ module datapath(
 				end
 				else
 					x = x + 1;
-				colour = 3'b110;
-				if(score_info[0] == 1)
-				begin
-					draw_x = 122 + x_offset + x;
-					draw_y = 15 + y_offset + y;
-				end
+				
+				// move to next score information and increment counter
 				score_info = score_info >> 1;
 				counter = counter + 1'b1;
 				
@@ -742,16 +765,23 @@ module datapath(
         endcase
     end // enable_signals
 	 
+	 // all the score information
 	 reg [299:0] score_info;
 	 
+	 // The pixel information for the word "SCORE"
 	 wire [209:0] score_text_wire;
 	 score_text score_text_module(
 		.OUT(score_text_wire)
 		);
 	
+	 // Pixel information for the player's current score (their size)
 	 wire [89:0] score_num_wire;
+	 //assign score_num_wire = 90'b001100_010010_010110_011010_001100_001100_010010_010110_011010_001100_001100_010010_010110_011010_001100;
 	 score_to_display score_to_display_module(
 		.score_display(score_num_wire),
+		.val_0(LEDR[4:1]),
+		.val_1(LEDR[8:5]),
+		.val_2(LEDR[12:9]),
 		.score_input(snake_size)
 		);
 endmodule
