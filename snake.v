@@ -304,10 +304,10 @@ module control(
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
 	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
-	assign DRAW_SCORE_MAX = 1;
+	assign DRAW_SCORE_MAX = 210;
 	delay_calc delayer(
 		.snake_size(snake_size),
-		.base_ticks(28'd10_000_000 - 1),
+		.base_ticks(28'd8_000_000 - 1),
 		.delay_max(DELAY_MAX)
 		);
 	//assign DELAY_MAX = 28'd10_000_000 - 1;
@@ -393,6 +393,9 @@ module control(
 				plot = 1'b1;
 				end
 			S_DRAW_WALLS: begin
+				plot = 1'b1;
+				end
+			S_DRAW_SCORE: begin
 				plot = 1'b1;
 				end
 			S_DRAW_APPLE: begin
@@ -491,12 +494,14 @@ module datapath(
 
 	// Used for assigning colour to each piece of the snake
 	reg [383:0] snake_colour;
-	reg [17:0] rainbow_order;
+	reg [14:0] rainbow_order;
 	
 	// Used for drawing the snake, gets initialized to actual values then shifted down by 8 bits to get to the next coord per counter tick 
 	reg [1023:0] snake_draw_x;
 	reg [1023:0] snake_draw_y;
 	reg [383:0] snake_draw_colour;
+	// For drawing score;
+	reg [7:0] x,y;
 
 	 // Input logic
     always @(posedge clk)
@@ -510,6 +515,7 @@ module datapath(
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
 			snake_draw_colour = snake_colour;
+			score_text = score_text_wire;
 			//collision = 1'b0;
 			end
 
@@ -537,12 +543,12 @@ module datapath(
 				snake_y[1023:39] = 0;
 				
 				// initializing snake colour and size
-				rainbow_order = 18'b100_110_010_011_001_101;
-				snake_colour[2:0] = rainbow_order[17:15];
-				snake_colour[5:3] = rainbow_order[14:12];
-				snake_colour[8:6] = rainbow_order[11:9];
-				snake_colour[11:9] = rainbow_order[8:6];
-				snake_colour[14:12] = rainbow_order[5:3];
+				rainbow_order = 18'b100_110_010_011_101;
+				snake_colour[2:0] = rainbow_order[14:12];
+				snake_colour[5:3] = rainbow_order[11:9];
+				snake_colour[8:6] = rainbow_order[8:6];
+				snake_colour[11:9] = rainbow_order[5:3];
+				snake_colour[14:12] = rainbow_order[2:0];
 				snake_colour[383:15] = 0;
 				snake_size = 8'd5;
 				// positionally load random walls 
@@ -587,6 +593,29 @@ module datapath(
 						draw_y = counter[6:0];
 						end
 					counter = counter + 1'b1;
+				end
+			S_DRAW_SCORE: begin
+				if (counter == 0)
+				begin
+					x = 0;
+					y = 0;
+				end
+				if (x == 34)
+				begin
+					x = 0;
+					y = y + 1;
+				end
+				else
+					x = x + 1;
+				colour = 3'b011;
+				if(score_text[0] == 1)
+				begin
+					draw_x = 122 + x;
+					draw_y = 15 +y;
+				end
+				score_text = score_text >> 1;
+				counter = counter + 1'b1;
+				
 				end
 			S_DRAW_APPLE: begin
 				// set colour to red
@@ -656,7 +685,7 @@ module datapath(
 				snake_colour = snake_colour << 3;
 				snake_colour[2:0] = rainbow_order[2:0];
 				rainbow_order = rainbow_order >> 3;
-				rainbow_order[17:15] = snake_colour[2:0];
+				rainbow_order[14:12] = snake_colour[2:0];
 				end
 
 			S_COLLISION_CHECK: begin
@@ -696,4 +725,10 @@ module datapath(
         // default:    // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
         endcase
     end // enable_signals
+	 
+	 wire [209:0] score_text_wire;
+	 reg [209:0] score_text;
+	 score_text score_text_module(
+		.OUT(score_text_wire)
+		);
 endmodule
