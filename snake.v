@@ -65,9 +65,8 @@ module snake(
 	wire [4:0] prev_state;
 	// for debugging, show current state on leds
 	assign LEDR[4:0] = state;
-	assign LEDR[9] = mv_right;
 	
-	wire [7:0] random_out;
+	wire [13:0] random_out;
 
 	// Create an Instance of a VGA controller - there can be only one!
 	// Define the number of colours as well as the initial background
@@ -166,7 +165,7 @@ module snake(
 	
 	random random(
 		.clock(CLOCK_50),
-		.max_number(8'd100),
+		.max_number(14'b11111111111111),
 		.num_out(random_out)
 	);
 //	clock hexs
@@ -206,35 +205,36 @@ module snake(
 //		);
 	
 // snake size hexs
-//	hex_display hex_0(
-//		.IN(snake_size[3:0]),
-//		.OUT(HEX0)
-//		);
-//	
-//	hex_display hex_1(
-//		.IN(snake_size[7:4]),
-//		.OUT(HEX1)
-//		);
-
 	hex_display hex_0(
-		.IN(apple_x[3:0]),
+		.IN(snake_size[3:0]),
 		.OUT(HEX0)
 		);
-
+	
 	hex_display hex_1(
-		.IN(apple_x[7:4]),
+		.IN(snake_size[7:4]),
 		.OUT(HEX1)
 		);
 
-	hex_display hex_2(
-		.IN(apple_y[3:0]),
-		.OUT(HEX2)
-		);
-
-	hex_display hex_3(
-		.IN({1'b0, apple_y[6:4]}),
-		.OUT(HEX3)
-		);
+// apple coordinates (random)
+//	hex_display hex_0(
+//		.IN(apple_x[3:0]),
+//		.OUT(HEX0)
+//		);
+//
+//	hex_display hex_1(
+//		.IN(apple_x[7:4]),
+//		.OUT(HEX1)
+//		);
+//
+//	hex_display hex_2(
+//		.IN(apple_y[3:0]),
+//		.OUT(HEX2)
+//		);
+//
+//	hex_display hex_3(
+//		.IN({1'b0, apple_y[6:4]}),
+//		.OUT(HEX3)
+//		);
 		
 endmodule
 
@@ -291,21 +291,23 @@ module control(
 					S_DELAY			= 5'd13, // to make sure the game isn't too sonic speedy
 					S_MAKE_APPLE_X = 5'd14, // load apple X
 					S_MAKE_APPLE_Y = 5'd15, // load apply Y
-					S_COLLISION_CHECK = 5'd16; // check if the snake is colliding with the walls or itself
+					S_COLLISION_CHECK = 5'd16, // check if snaking is colliding with walls / itself
+					S_DRAW_SCORE = 5'd17; // draw score information
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT = 2'b01,
 					DOWN 	= 2'b10,
 					UP 	= 2'b11;
 
-	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SNAKE_MAX, DELAY_MAX, COLLISION_MAX;
+	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SCORE_MAX, DRAW_SNAKE_MAX, DELAY_MAX, COLLISION_MAX;
 	assign CLR_SCREEN_MAX = 28'd32_000; // 160 * 120
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
 	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
+	assign DRAW_SCORE_MAX = 210;
 	delay_calc delayer(
 		.snake_size(snake_size),
-		.base_ticks(28'd10_000_000 - 1),
+		.base_ticks(28'd8_000_000 - 1),
 		.delay_max(DELAY_MAX)
 		);
 	//assign DELAY_MAX = 28'd10_000_000 - 1;
@@ -328,9 +330,15 @@ module control(
 				end
 			S_DRAW_WALLS: begin
 				if (counter == DRAW_WALLS_MAX)
-					next_state = S_DRAW_APPLE;
+					next_state = S_DRAW_SCORE;
 				else
 					next_state = S_DRAW_WALLS;
+				end
+			S_DRAW_SCORE: begin
+				if (counter == DRAW_SCORE_MAX)
+					next_state = S_DRAW_APPLE;
+				else
+					next_state = S_DRAW_SCORE;
 				end
 			S_DRAW_APPLE: next_state = S_DRAW_SNAKE;
 			S_DRAW_SNAKE: begin
@@ -341,15 +349,9 @@ module control(
 				end
 			S_DELAY: begin			
 				if (counter == DELAY_MAX)
-					next_state = S_COLLISION_CHECK;
-				else
-					next_state = S_DELAY;
-				end
-			S_COLLISION_CHECK: begin
-				if (counter == COLLISION_MAX)
 					next_state = S_MOVING;
 				else
-					next_state = S_COLLISION_CHECK;
+					next_state = S_DELAY;
 				end
 			S_MOVING: begin
 				// check if the snake head touched a wall or itself
@@ -359,7 +361,13 @@ module control(
 				else if (snake_x[7:0] == apple_x[7:0] && snake_y[7:0] == {1'b0, apple_y[6:0]}) 	// check the snake head touched the apple
 					next_state = S_MUNCHING;
 				else
+					next_state = S_COLLISION_CHECK;
+				end
+			S_COLLISION_CHECK: begin
+				if (counter == COLLISION_MAX)
 					next_state = S_CLR_SCREEN;
+				else
+					next_state = S_COLLISION_CHECK;
 				end
 			S_MUNCHING: next_state = S_MAKE_APPLE_X;
 			S_DEAD: next_state = S_SCORE_MENU;
@@ -385,6 +393,9 @@ module control(
 				plot = 1'b1;
 				end
 			S_DRAW_WALLS: begin
+				plot = 1'b1;
+				end
+			S_DRAW_SCORE: begin
 				plot = 1'b1;
 				end
 			S_DRAW_APPLE: begin
@@ -438,7 +449,7 @@ module datapath(
 	input [1:0] direction,
 	input grow, dead,
 	input [4:0] current_state, prev_state,
-	input [7:0] random_in,
+	input [13:0] random_in,
 	
 	output reg [27:0] counter,
 	
@@ -473,7 +484,8 @@ module datapath(
 					S_DELAY			= 5'd13,
 					S_MAKE_APPLE_X = 5'd14,
 					S_MAKE_APPLE_Y = 5'd15,
-					S_COLLISION_CHECK = 5'd16; // check if snaking is colliding with walls / itself
+					S_COLLISION_CHECK = 5'd16, // check if snaking is colliding with walls / itself
+					S_DRAW_SCORE = 5'd17; // draw score information
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT	= 2'b01,
@@ -482,12 +494,14 @@ module datapath(
 
 	// Used for assigning colour to each piece of the snake
 	reg [383:0] snake_colour;
-	reg [17:0] rainbow_order;
+	reg [14:0] rainbow_order;
 	
 	// Used for drawing the snake, gets initialized to actual values then shifted down by 8 bits to get to the next coord per counter tick 
 	reg [1023:0] snake_draw_x;
 	reg [1023:0] snake_draw_y;
 	reg [383:0] snake_draw_colour;
+	// For drawing score;
+	reg [7:0] x,y;
 
 	 // Input logic
     always @(posedge clk)
@@ -501,7 +515,8 @@ module datapath(
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
 			snake_draw_colour = snake_colour;
-			collision = 1'b0;
+			score_text = score_text_wire;
+			//collision = 1'b0;
 			end
 
         case (current_state)
@@ -512,6 +527,7 @@ module datapath(
 			S_STARTING_WAIT: begin
 				end
 			S_LOAD_GAME: begin
+				collision = 1'b0;
 				// initializing snake position
 				snake_x[7:0] = 8'd30;
 				snake_y[6:0] = 7'd20;
@@ -523,19 +539,40 @@ module datapath(
 				snake_y[30:24] = 7'd20;
 				snake_x[39:32] = 8'd34;
 				snake_y[38:32] = 7'd20;
+				snake_x[1023:40] = 0;
+				snake_y[1023:39] = 0;
 				
 				// initializing snake colour and size
-				rainbow_order = 18'b101_001_011_010_110_100;
-				snake_colour[14:0] = rainbow_order[14:0];
+				rainbow_order = 18'b100_110_010_011_101;
+				snake_colour[2:0] = rainbow_order[14:12];
+				snake_colour[5:3] = rainbow_order[11:9];
+				snake_colour[8:6] = rainbow_order[8:6];
+				snake_colour[11:9] = rainbow_order[5:3];
+				snake_colour[14:12] = rainbow_order[2:0];
+				snake_colour[383:15] = 0;
 				snake_size = 8'd5;
 				// positionally load random walls 
 				end
 			S_MAKE_APPLE_X: begin
-				apple_x[7:0] <= random_in[7:0] + 8'd8;
+					if(random_in[6:0] >= 7'd100)
+					begin
+						apple_x[7:0] <= random_in[6:0] + 8'd2 - 7'd100;
+					end
+					else
+					begin
+						apple_x[7:0] <= random_in[6:0] + 8'd2;
+					end
 				end
 				
 			S_MAKE_APPLE_Y: begin
-				apple_y[6:0] <= random_in[6:0] + 7'd8;
+				if(random_in[13:7] >= 7'd100)
+				begin
+					apple_y[6:0] <= random_in[13:7] + 7'd2 - 7'd100;
+				end
+				else
+				begin
+				apple_y[6:0] <= random_in[13:7] + 7'd2;
+				end
 			end
 			
 			S_CLR_SCREEN: begin
@@ -556,6 +593,29 @@ module datapath(
 						draw_y = counter[6:0];
 						end
 					counter = counter + 1'b1;
+				end
+			S_DRAW_SCORE: begin
+				if (counter == 0)
+				begin
+					x = 0;
+					y = 0;
+				end
+				if (x == 34)
+				begin
+					x = 0;
+					y = y + 1;
+				end
+				else
+					x = x + 1;
+				colour = 3'b011;
+				if(score_text[0] == 1)
+				begin
+					draw_x = 122 + x;
+					draw_y = 15 +y;
+				end
+				score_text = score_text >> 1;
+				counter = counter + 1'b1;
+				
 				end
 			S_DRAW_APPLE: begin
 				// set colour to red
@@ -625,7 +685,7 @@ module datapath(
 				snake_colour = snake_colour << 3;
 				snake_colour[2:0] = rainbow_order[2:0];
 				rainbow_order = rainbow_order >> 3;
-				rainbow_order[17:15] = snake_colour[2:0];
+				rainbow_order[14:12] = snake_colour[2:0];
 				end
 
 			S_COLLISION_CHECK: begin
@@ -657,10 +717,6 @@ module datapath(
 					counter = counter + 1;
 				end
 			S_DEAD: begin
-				// test code to see if the player actually dies on collision, should draw a green dot at (0, 0)
-				colour = 3'b010;
-				draw_x = 8'b0;
-				draw_y = 7'b0;
 
 				end
 			S_SCORE_MENU: begin
@@ -669,4 +725,10 @@ module datapath(
         // default:    // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
         endcase
     end // enable_signals
+	 
+	 wire [209:0] score_text_wire;
+	 reg [209:0] score_text;
+	 score_text score_text_module(
+		.OUT(score_text_wire)
+		);
 endmodule

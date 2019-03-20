@@ -4,6 +4,6 @@ module delay_calc(
 	output [27:0] delay_max
 	);
 
-	assign delay_max = base_ticks - (snake_size * 50_000);
+	assign delay_max = base_ticks - (snake_size * 40_000);
 	
 endmodule

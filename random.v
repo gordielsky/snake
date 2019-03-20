@@ -6,11 +6,11 @@ module random(clock, max_number, num_out);
     outputted from the module.
 */
 input clock;
-input [7:0]max_number;
+input [13:0]max_number;
 
-output [7:0]num_out;
+output [13:0]num_out;
 
-reg [7:0]counter;
+reg [13:0]counter;
 
 assign num_out = counter;
 
