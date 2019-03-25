@@ -275,6 +275,14 @@ module control(
 	);
 	
 	reg [4:0] previous_state, current_state, next_state; 
+
+	wire vsync_wire;
+	rate_divider vsync(
+		.clk(clk),
+		.enable(vsync_wire),
+		.max_ticks(28'd833334),
+		.par_load(1'b0)
+	);
 	
 	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
 					S_STARTING 		= 5'd1, // press start game button
@@ -349,7 +357,7 @@ module control(
 					next_state = S_DRAW_SNAKE;
 				end
 			S_DELAY: begin			
-				if (counter == DELAY_MAX)
+				if (counter == DELAY_MAX && vsync_wire == 1'b1)
 					next_state = S_MOVING;
 				else
 					next_state = S_DELAY;
