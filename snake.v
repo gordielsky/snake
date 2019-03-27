@@ -531,6 +531,7 @@ module datapath(
 	// For drawing score;
 	reg [7:0] x,y;
 	reg [7:0] x_offset, y_offset, width;
+	reg [7:0] high_nums_offset;
 	// To update highscores
 	reg update;
 
@@ -646,8 +647,9 @@ module datapath(
 				counter = counter + 1'b1;
 				end
 			S_DRAW_SCORE: begin
-				//if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 70 || counter == 820 || counter == 850 || counter == 880 || counter == 910 || counter == 940 || counter == 970 || counter == 1000 || counter == 1030 || counter == 1060 || counter == 1090 || counter == 1120 || counter == 1150 || counter == 1180 || counter == 1210)
-				if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 720 || counter == 750 || counter == 780 || counter == 810 || counter == 840 || counter == 870 || counter == 900 || counter == 930 || counter == 960 || counter == 990 || counter == 1020 || counter == 1050 || counter == 1080 || counter == 1110 || counter == 1140)
+				high_nums_offset = 40;
+				if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 70 || counter == 820 || counter == 850 || counter == 880 || counter == 910 || counter == 940 || counter == 970 || counter == 1000 || counter == 1030 || counter == 1060 || counter == 1090 || counter == 1120 || counter == 1150 || counter == 1180 || counter == 1210)
+				//if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 720 || counter == 750 || counter == 780 || counter == 810 || counter == 840 || counter == 870 || counter == 900 || counter == 930 || counter == 960 || counter == 990 || counter == 1020 || counter == 1050 || counter == 1080 || counter == 1110 || counter == 1140)
 				begin
 					x = 0;
 					y = 0;
@@ -679,101 +681,116 @@ module datapath(
 					x_offset = 22;
 					y_offset = 10;
 				end
-				else if (counter < 720)
+				//else if (counter < 720)
+				else if (counter < 790)
 				begin
 					width = 35;
 					x_offset = 00;
 					y_offset = 20;
 				end
-				else if (counter < 750)
+				//else if (counter < 750)
+				else if (counter < 820)
 				begin
 					width = 6;
 					x_offset = 10;
-					y_offset = 40;
+					y_offset = high_nums_offset;
 				end
-				else if (counter < 780)
+				//else if (counter < 780)
+				else if (counter < 850)
 				begin
 					width = 6;
 					x_offset = 16;
-					y_offset = 40;
+					y_offset = high_nums_offset;
 				end
-				else if (counter < 810)
+//				else if (counter < 810)
+				else if (counter < 880)
 				begin
 					width = 6;
 					x_offset = 22;
-					y_offset = 40;
+					y_offset = high_nums_offset;
 				end
-				else if (counter < 840)
+//				else if (counter < 840)
+				else if (counter < 910)
 				begin
 					width = 6;
 					x_offset = 10;
-					y_offset = 50;
+					y_offset = high_nums_offset + 8'd7;
 				end
-				else if (counter < 870)
+//				else if (counter < 870)
+				else if (counter < 940)
 				begin
 					width = 6;
 					x_offset = 16;
-					y_offset = 50;
+					y_offset = high_nums_offset + 8'd7;
 				end
-				else if (counter < 900)
+//				else if (counter < 900)
+				else if (counter < 970)
 				begin
 					width = 6;
 					x_offset = 22;
-					y_offset = 50;
+					y_offset = high_nums_offset + 8'd7;
 				end
-				else if (counter < 930)
+//				else if (counter < 930)
+				else if (counter < 1000)
 				begin
 					width = 6;
 					x_offset = 10;
-					y_offset = 60;
+					y_offset = high_nums_offset + 8'd14;
 				end
-				else if (counter < 960)
+//				else if (counter < 960)
+				else if (counter < 1030)
 				begin
 					width = 6;
 					x_offset = 16;
-					y_offset = 60;
+					y_offset = high_nums_offset + 8'd14;
 				end
-				else if (counter < 990)
+//				else if (counter < 990)
+				else if (counter < 1060)
 				begin
 					width = 6;
 					x_offset = 22;
-					y_offset = 60;
+					y_offset = high_nums_offset + 8'd14;
 				end
-				else if (counter < 1020)
+//				else if (counter < 1020)
+				else if (counter < 1090)
 				begin
 					width = 6;
 					x_offset = 10;
-					y_offset = 70;
+					y_offset = high_nums_offset + 8'd21;
 				end
-				else if (counter < 1050)
+//				else if (counter < 1050)
+				else if (counter < 1120)
 				begin
 					width = 6;
 					x_offset = 16;
-					y_offset = 70;
+					y_offset = high_nums_offset + 8'd21;
 				end
-				else if (counter < 1080)
+//				else if (counter < 1080)
+				else if (counter < 1150)
 				begin
 					width = 6;
 					x_offset = 22;
-					y_offset = 70;
+					y_offset = high_nums_offset + 8'd21;
 				end
-				else if (counter < 1110)
+//				else if (counter < 1110)
+				else if (counter < 1180)
 				begin
 					width = 6;
 					x_offset = 10;
-					y_offset = 80;
+					y_offset = high_nums_offset + 8'd28;
 				end
-				else if (counter < 1140)
+//				else if (counter < 1140)
+				else if (counter < 1210)
 				begin
 					width = 6;
 					x_offset = 16;
-					y_offset = 80;
+					y_offset = high_nums_offset + 8'd28;
 				end
 				else
 				begin
 					width = 6;
 					x_offset = 22;
-					y_offset = 80;
+					y_offset = high_nums_offset + 8'd28;
 				end
 				
 				// draw the current information at the calculated position in yellow
@@ -942,14 +959,14 @@ module datapath(
     end // enable_signals
 	 
 	 // all the score information
-	 reg [1169:0] score_info;
+	 reg [1239:0] score_info;
 	 
 	 // The pixel information for the word "SCORE"
 	 wire [209:0] score_text_wire;
 	 score_text score_text_module(
 		.OUT(score_text_wire)
 		);
-	wire [419:0] highscore_text_wire;
+	wire [489:0] highscore_text_wire;
 	highscore_text highscore_text_module(
 		.OUT(highscore_text_wire)
 		);
@@ -975,6 +992,11 @@ module datapath(
 //	assign hi5 = 8'b0;
 	highscore_tracker highscores(
 		.curr_score(score),
+		.curr_hi1(hi1),
+		.curr_hi2(hi2),
+		.curr_hi3(hi3),
+		.curr_hi4(hi4),
+		.curr_hi5(hi5),
 		.update(update),
 		.hi1(hi1),
 		.hi2(hi2),
