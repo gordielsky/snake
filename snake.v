@@ -63,7 +63,7 @@ module snake(
 	// previous state of the game
 	wire [4:0] prev_state;
 	// for debugging, show current state on leds
-	assign LEDR[4:0] = state;
+	//assign LEDR[4:0] = state;
 	
 	wire [13:0] random_out;
 
@@ -206,15 +206,15 @@ module snake(
 //		);
 	
 // snake size hexs
-	hex_display hex_0(
-		.IN(snake_size[3:0]),
-		.OUT(HEX0)
-		);
-	
-	hex_display hex_1(
-		.IN(snake_size[7:4]),
-		.OUT(HEX1)
-		);
+//	hex_display hex_0(
+//		.IN(snake_size[3:0]),
+//		.OUT(HEX0)
+//		);
+//	
+//	hex_display hex_1(
+//		.IN(snake_size[7:4]),
+//		.OUT(HEX1)
+//		);
 
 // apple coordinates (random)
 //	hex_display hex_0(
@@ -277,12 +277,6 @@ module control(
 	reg [4:0] previous_state, current_state, next_state; 
 
 	wire vsync_wire;
-	rate_divider vsync(
-		.clk(clk),
-		.enable(vsync_wire),
-		.max_ticks(28'd833334),
-		.par_load(1'b0)
-	);
 	
 	localparam 	S_MAIN_MENU 	= 5'd0, // menu state
 					S_STARTING 		= 5'd1, // press start game button
@@ -313,12 +307,20 @@ module control(
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
 	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
-	assign DRAW_SCORE_MAX = 210 + 90;
+	assign DRAW_SCORE_MAX = 1240;
 	delay_calc delayer(
 		.snake_size(snake_size),
 		.base_ticks(28'd8_000_000 - 1),
 		.delay_max(DELAY_MAX)
 		);
+		
+	rate_divider vsync(
+		.clk(clk),
+		.enable(vsync_wire),
+		.max_ticks(DELAY_MAX),
+		.par_load(1'b0)
+	);
+	
 	//assign DELAY_MAX = 28'd10_000_000 - 1;
     
     // Next state logic aka our state table
@@ -357,7 +359,7 @@ module control(
 					next_state = S_DRAW_SNAKE;
 				end
 			S_DELAY: begin			
-				if (counter == DELAY_MAX && vsync_wire == 1'b1)
+				if (vsync_wire == 1'b1)
 					next_state = S_MOVING;
 				else
 					next_state = S_DELAY;
@@ -477,8 +479,16 @@ module datapath(
 
 	output reg collision
 	);
+	
+	reg [1:0]snake_dir;
+	reg [1:0]last_dir;
+	
 
-
+	localparam 	LEFT 	= 2'b00,
+					RIGHT = 2'b01,
+					DOWN 	= 2'b10,
+					UP 	= 2'b11;
+					
 	localparam 	S_MAIN_MENU = 5'd0, // menu state
 					S_STARTING 		= 5'd1, // press start game button
 					S_STARTING_WAIT= 5'd2, // stop pressing start game button
@@ -498,14 +508,8 @@ module datapath(
 					S_COLLISION_CHECK = 5'd16, // check if snaking is colliding with walls / itself
 					S_DRAW_SCORE = 5'd17; // draw score information
 
-	localparam 	LEFT 	= 2'b00,
-					RIGHT	= 2'b01,
-					DOWN 	= 2'b10,
-					UP 	= 2'b11;
-
 	// Used for assigning colour to each piece of the snake
 	reg [383:0] snake_colour;
-	reg [383:0] snake_colour_000;
 	reg [383:0] snake_colour_000;
 	reg [383:0] snake_colour_001;
 	reg [383:0] snake_colour_010;
@@ -527,6 +531,8 @@ module datapath(
 	// For drawing score;
 	reg [7:0] x,y;
 	reg [7:0] x_offset, y_offset, width;
+	// To update highscores
+	reg update;
 
 	 // Input logic
     always @(posedge clk)
@@ -540,7 +546,7 @@ module datapath(
 			snake_draw_x = snake_x;
 			snake_draw_y = snake_y;
 			snake_draw_colour = snake_colour;
-			score_info = {score_num_wire, score_text_wire};
+			score_info = {hi5_num, hi4_num, hi3_num, hi2_num, hi1_num, highscore_text_wire, score_num_wire, score_text_wire};
 //			score_text = score_text_wire;
 //			score_num = score_num_wire;
 			//collision = 1'b0;
@@ -555,7 +561,7 @@ module datapath(
 				end
 			S_LOAD_GAME: begin
 				// init basic colors for the snake (might be able to do this outside of always block)
-				snake_colour_000 = 384'b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;
+				snake_colour_000 = 384'b100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010011101100110010;
 				snake_colour_001 = 384'b001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001001;
 				snake_colour_010 = 384'b010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010010;
 				snake_colour_011 = 384'b011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011011;
@@ -602,7 +608,7 @@ module datapath(
 					// update last apple colour
 					last_apple_colour = apple_colour;
 					// set the apple's colour based off of it's position (randomly)
-					if(apple_x[2:0] < 3'b111)
+					if(apple_x[2:0] > 3'b000)
 						apple_colour = apple_x[2:0]; // default red apple
 					else
 						apple_colour = 3'b100; // set to default colour instead of black
@@ -640,7 +646,8 @@ module datapath(
 				counter = counter + 1'b1;
 				end
 			S_DRAW_SCORE: begin
-				if (counter == 0 || counter == 210 || counter == 240 || counter == 270)
+				//if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 70 || counter == 820 || counter == 850 || counter == 880 || counter == 910 || counter == 940 || counter == 970 || counter == 1000 || counter == 1030 || counter == 1060 || counter == 1090 || counter == 1120 || counter == 1150 || counter == 1180 || counter == 1210)
+				if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 720 || counter == 750 || counter == 780 || counter == 810 || counter == 840 || counter == 870 || counter == 900 || counter == 930 || counter == 960 || counter == 990 || counter == 1020 || counter == 1050 || counter == 1080 || counter == 1110 || counter == 1140)
 				begin
 					x = 0;
 					y = 0;
@@ -666,11 +673,107 @@ module datapath(
 					x_offset = 16;
 					y_offset = 10;
 				end
-				else
+				else if (counter < 300)
 				begin
 					width = 6;
 					x_offset = 22;
 					y_offset = 10;
+				end
+				else if (counter < 720)
+				begin
+					width = 35;
+					x_offset = 00;
+					y_offset = 20;
+				end
+				else if (counter < 750)
+				begin
+					width = 6;
+					x_offset = 10;
+					y_offset = 40;
+				end
+				else if (counter < 780)
+				begin
+					width = 6;
+					x_offset = 16;
+					y_offset = 40;
+				end
+				else if (counter < 810)
+				begin
+					width = 6;
+					x_offset = 22;
+					y_offset = 40;
+				end
+				else if (counter < 840)
+				begin
+					width = 6;
+					x_offset = 10;
+					y_offset = 50;
+				end
+				else if (counter < 870)
+				begin
+					width = 6;
+					x_offset = 16;
+					y_offset = 50;
+				end
+				else if (counter < 900)
+				begin
+					width = 6;
+					x_offset = 22;
+					y_offset = 50;
+				end
+				else if (counter < 930)
+				begin
+					width = 6;
+					x_offset = 10;
+					y_offset = 60;
+				end
+				else if (counter < 960)
+				begin
+					width = 6;
+					x_offset = 16;
+					y_offset = 60;
+				end
+				else if (counter < 990)
+				begin
+					width = 6;
+					x_offset = 22;
+					y_offset = 60;
+				end
+				else if (counter < 1020)
+				begin
+					width = 6;
+					x_offset = 10;
+					y_offset = 70;
+				end
+				else if (counter < 1050)
+				begin
+					width = 6;
+					x_offset = 16;
+					y_offset = 70;
+				end
+				else if (counter < 1080)
+				begin
+					width = 6;
+					x_offset = 22;
+					y_offset = 70;
+				end
+				else if (counter < 1110)
+				begin
+					width = 6;
+					x_offset = 10;
+					y_offset = 80;
+				end
+				else if (counter < 1140)
+				begin
+					width = 6;
+					x_offset = 16;
+					y_offset = 80;
+				end
+				else
+				begin
+					width = 6;
+					x_offset = 22;
+					y_offset = 80;
 				end
 				
 				// draw the current information at the calculated position in yellow
@@ -717,9 +820,16 @@ module datapath(
 				counter = counter + 1'b1;
 				end
 			S_MOVING: begin
+				if(direction != last_dir)
+				begin
+					last_dir <= direction;
+					snake_dir <= direction;
+				end
+				
+			
 				// not sure if these checks should be done only in moving state
 				// wondering if they'll register if you press the button at the wrong time
-				if (direction == LEFT)
+				if (snake_dir == LEFT)
 					begin
 					// move everything back one (lose the last saved coord)
 					snake_x = snake_x << 8;
@@ -728,7 +838,7 @@ module datapath(
 					snake_x[7:0] = snake_x[15:8] - 1'b1;
 					snake_y[7:0] = snake_y[15:8];
 					end
-				else if (direction == RIGHT)
+				else if (snake_dir == RIGHT)
 					begin
 					// move everything back one (lose the last saved coord)
 					snake_x = snake_x << 8;
@@ -737,7 +847,7 @@ module datapath(
 					snake_x[7:0] = snake_x[15:8] + 1'b1;
 					snake_y[7:0] = snake_y[15:8];
 					end
-				else if (direction == DOWN)
+				else if (snake_dir == DOWN)
 					begin
 					// move everything back one (lose the last saved coord)
 					snake_x = snake_x << 8;
@@ -746,7 +856,7 @@ module datapath(
 					snake_x[7:0] = snake_x[15:8];
 					snake_y[7:0] = snake_y[15:8] + 1'b1;
 					end
-				else if (direction == UP)
+				else if (snake_dir == UP)
 					begin
 					// move everything back one (lose the last saved coord)
 					snake_x = snake_x << 8;
@@ -757,9 +867,9 @@ module datapath(
 					end
 
 				// if the last apple eaten was white, make the snake disco
-				if(last_apple_colour[2:0] == 3'b000)
+				if(last_apple_colour[2:0] == 3'b111)
 					begin
-						// maintain rainbow colour order
+					// maintain rainbow colour order
 					snake_colour = snake_colour << 3;
 					snake_colour[2:0] = rainbow_order[2:0];
 					rainbow_order = rainbow_order >> 3;
@@ -777,7 +887,7 @@ module datapath(
 					rainbow_order[14:12] = snake_colour_000[2:0];
 
 					// change colour of snake based on colour of apple
-					if(apple_colour == 3'b000)
+					if(apple_colour == 3'b111)
 						snake_colour = snake_colour_000;
 					else if (apple_colour == 3'b001)
 						snake_colour = snake_colour_001;
@@ -822,7 +932,7 @@ module datapath(
 				counter = counter + 1;
 				end
 			S_DEAD: begin
-
+				update = 1'b1;
 				end
 			S_SCORE_MENU: begin
 				// scores not implemented
@@ -832,22 +942,71 @@ module datapath(
     end // enable_signals
 	 
 	 // all the score information
-	 reg [299:0] score_info;
+	 reg [1169:0] score_info;
 	 
 	 // The pixel information for the word "SCORE"
 	 wire [209:0] score_text_wire;
 	 score_text score_text_module(
 		.OUT(score_text_wire)
 		);
+	wire [419:0] highscore_text_wire;
+	highscore_text highscore_text_module(
+		.OUT(highscore_text_wire)
+		);
 	
 	 // Pixel information for the player's current score (their size)
 	 wire [89:0] score_num_wire;
+	 wire [7:0] score;
+	 assign score = snake_size - 8'd5;
 	 //assign score_num_wire = 90'b001100_010010_010110_011010_001100_001100_010010_010110_011010_001100_001100_010010_010110_011010_001100;
-	 score_to_display score_to_display_module(
+	 score_to_display display_score(
 		.score_display(score_num_wire),
-		.val_0(LEDR[4:1]),
-		.val_1(LEDR[8:5]),
-		.val_2(LEDR[12:9]),
-		.score_input(snake_size)
+		.score_input(score)
+		);
+
+		
+	// get the highscores
+	wire [7:0] hi1, hi2, hi3, hi4, hi5;
+	// initialize them all to 0
+//	assign hi1 = 8'b0;
+//	assign hi2 = 8'b0;
+//	assign hi3 = 8'b0;
+//	assign hi4 = 8'b0;
+//	assign hi5 = 8'b0;
+	highscore_tracker highscores(
+		.curr_score(score),
+		.update(update),
+		.hi1(hi1),
+		.hi2(hi2),
+		.hi3(hi3),
+		.hi4(hi4),
+		.hi5(hi5),
+		);
+	
+	// get the pixel information to draw highscores
+	wire [89:0] hi1_num, hi2_num, hi3_num, hi4_num, hi5_num;
+	score_to_display display_hi1(
+		.score_display(hi1_num),
+		.score_input(hi1)
+		);
+		
+	score_to_display display_hi2(
+		.score_display(hi2_num),
+		.score_input(hi2)
+		);
+		
+	score_to_display display_hi3(
+		.score_display(hi3_num),
+		.score_input(hi3)
+		);
+		
+	score_to_display display_hi4(
+		.score_display(hi4_num),
+		.score_input(hi4)
+		);
+		
+	score_to_display display_hi5(
+		.score_display(hi5_num),
+		.score_input(hi5)
 		);
 endmodule
