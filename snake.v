@@ -648,7 +648,7 @@ module datapath(
 				end
 			S_DRAW_SCORE: begin
 				high_nums_offset = 40;
-				if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 70 || counter == 820 || counter == 850 || counter == 880 || counter == 910 || counter == 940 || counter == 970 || counter == 1000 || counter == 1030 || counter == 1060 || counter == 1090 || counter == 1120 || counter == 1150 || counter == 1180 || counter == 1210)
+				if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 790 || counter == 820 || counter == 850 || counter == 880 || counter == 910 || counter == 940 || counter == 970 || counter == 1000 || counter == 1030 || counter == 1060 || counter == 1090 || counter == 1120 || counter == 1150 || counter == 1180 || counter == 1210)
 				//if (counter == 0 || counter == 210 || counter == 240 || counter == 270 || counter == 300 || counter == 720 || counter == 750 || counter == 780 || counter == 810 || counter == 840 || counter == 870 || counter == 900 || counter == 930 || counter == 960 || counter == 990 || counter == 1020 || counter == 1050 || counter == 1080 || counter == 1110 || counter == 1140)
 				begin
 					x = 0;
