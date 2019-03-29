@@ -78,7 +78,7 @@ module snake(
 	// previous state of the game
 	wire [4:0] prev_state;
 	// for debugging, show current state on leds
-	//assign LEDR[4:0] = state;
+	assign LEDR[4:0] = state;
 	
 	wire [13:0] random_out;
 
@@ -311,19 +311,21 @@ module control(
 					S_MAKE_APPLE_X = 5'd14, // load apple X
 					S_MAKE_APPLE_Y = 5'd15, // load apply Y
 					S_COLLISION_CHECK = 5'd16, // check if snaking is colliding with walls / itself
-					S_DRAW_SCORE = 5'd17; // draw score information
+					S_DRAW_SCORE 	= 5'd17, // draw score information
+					S_DRAW_END 		= 5'd18; // draw end game screen after dying
 
 	localparam 	LEFT 	= 2'b00,
 					RIGHT = 2'b01,
 					DOWN 	= 2'b10,
 					UP 	= 2'b11;
 
-	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SCORE_MAX, DRAW_SNAKE_MAX, DELAY_MAX, COLLISION_MAX;
+	wire [27:0] CLR_SCREEN_MAX, DRAW_WALLS_MAX, DRAW_SCORE_MAX, DRAW_SNAKE_MAX, DELAY_MAX, COLLISION_MAX, DRAW_END_MAX;
 	assign CLR_SCREEN_MAX = 28'd32_000; // 160 * 120
 	assign DRAW_WALLS_MAX = 28'd32_000; // 4 * 160 + 4 * (120 - 4) - size of walls (add # randomly generated walls)
 	assign DRAW_SNAKE_MAX = snake_size;
 	assign COLLISION_MAX = snake_size + 1; // currently checking all snake blocks + 1 check for predetermined walls, this size can be expanded to check for other collisions in the future
 	assign DRAW_SCORE_MAX = 1240;
+	assign DRAW_END_MAX = 2500;
 	delay_calc delayer(
 		.snake_size(snake_size),
 		.base_ticks(28'd8_000_000 - 1),
@@ -397,7 +399,13 @@ module control(
 					next_state = S_COLLISION_CHECK;
 				end
 			S_MUNCHING: next_state = S_MAKE_APPLE_X;
-			S_DEAD: next_state = S_SCORE_MENU;
+			S_DEAD: next_state = S_DRAW_END;
+			S_DRAW_END: begin
+				if (counter == DRAW_END_MAX)
+					next_state = S_SCORE_MENU;
+				else
+					next_state = S_DRAW_END;
+				end
 			S_SCORE_MENU: next_state = press_button ? S_STARTING : S_SCORE_MENU; // Stay on menu until restart game
 			default:     next_state = S_MAIN_MENU;
         endcase
@@ -429,6 +437,9 @@ module control(
 				plot = 1'b1;
 				end
 			S_DRAW_SNAKE: begin
+				plot = 1'b1;
+				end
+			S_DRAW_END: begin
 				plot = 1'b1;
 				end
 			S_MOVING: begin
@@ -523,7 +534,8 @@ module datapath(
 					S_MAKE_APPLE_X = 5'd14,
 					S_MAKE_APPLE_Y = 5'd15,
 					S_COLLISION_CHECK = 5'd16, // check if snaking is colliding with walls / itself
-					S_DRAW_SCORE = 5'd17; // draw score information
+					S_DRAW_SCORE 	= 5'd17, // draw score information
+					S_DRAW_END 		= 5'd18; // draw end game screen after dying
 
 	// Used for assigning colour to each piece of the snake
 	reg [383:0] snake_colour;
@@ -550,6 +562,7 @@ module datapath(
 	reg [7:0] high_nums_offset;
 	// To update highscores
 	reg update;
+	reg got_high;
 	// toggle to oscilate
 	reg [3:0] poison_counter;
 	reg toggle;
@@ -567,6 +580,7 @@ module datapath(
 			snake_draw_y = snake_y;
 			snake_draw_colour = snake_colour;
 			score_info = {hi5_num, hi4_num, hi3_num, hi2_num, hi1_num, highscore_text_wire, score_num_wire, score_text_wire};
+			endgame_overlay = endgame_grid;
 //			hi1_val = hi1;
 //			hi2_val = hi2;
 //			hi3_val = hi3;
@@ -635,6 +649,9 @@ module datapath(
 				snake_colour[14:12] = rainbow_order[2:0];
 				snake_colour[383:15] = 0;
 				snake_size = 8'd5;
+				
+				// didn't get high score yet!
+				got_high = 1'b0;
 				// positionally load random walls 
 				end
 			S_MAKE_APPLE_X: begin
@@ -1023,6 +1040,7 @@ module datapath(
 					hi3 = hi2;
 					hi2 = hi1;
 					hi1 = score;
+					got_high = 1'b1;
 				end
 				// got 2nd best score
 				else if (score > hi2) begin
@@ -1030,22 +1048,61 @@ module datapath(
 					hi4 = hi3;
 					hi3 = hi2;
 					hi2 = score;
+					got_high = 1'b1;
 				end
 				// got the bronze
 				else if (score > hi3) begin
 					hi5 = hi4;
 					hi4 = hi3;
 					hi3 = score;
+					got_high = 1'b1;
 				end
 				// at least you made 4th!
 				else if (score > hi4) begin
 					hi5 = hi4;
 					hi4 = score;
+					got_high = 1'b1;
 				end
 				// bottom of the highscores buddy. at least you made it somewhere
 				else if (score > hi5) begin
 					hi5 = score;
+					got_high = 1'b1;
 				end
+				else
+					got_high = 1'b0;
+				end
+			S_DRAW_END: begin
+				// for starting to draw
+				if (counter == 0)
+				begin
+					x = 0;
+					y = 0;
+				end
+				// information for drawing
+				width = 100;
+				x_offset = 0;
+				y_offset = 0;
+				
+				// draw the current information at the calculated position in yellow
+				colour = 3'b110;
+				if(endgame_overlay[0] == 1)
+				begin
+					draw_x = 12 + x_offset + x;
+					draw_y = 20 + y_offset + y;
+				end
+				
+				// set the position of the next pixel
+				if (x == width - 1)
+				begin
+					x = 0;
+					y = y + 1;
+				end
+				else
+					x = x + 1;
+				
+				// move to next overlay pixel and increment counter
+				endgame_overlay = endgame_overlay >> 1;
+				counter = counter + 1'b1;
 				end
 			S_SCORE_MENU: begin
 				// scores not implemented
@@ -1071,7 +1128,6 @@ module datapath(
 	 wire [89:0] score_num_wire;
 	 wire [7:0] score;
 	 assign score = snake_size - 8'd5;
-	 //assign score_num_wire = 90'b001100_010010_010110_011010_001100_001100_010010_010110_011010_001100_001100_010010_010110_011010_001100;
 	 score_to_display display_score(
 		.score_display(score_num_wire),
 		.score_input(score)
@@ -1117,6 +1173,17 @@ module datapath(
 		.score_display(hi5_num),
 		.score_input(hi5)
 		);
+		
+	// end game screen draw stuff
+	wire [2499:0] endgame_grid;
+	reg [2499:0] endgame_overlay;
+	game_overlay overlay_0(
+		.OUT(endgame_grid),
+		.is_high_score(got_high),
+		.is_win(1'b0),
+		.clock(clk)
+		);
+	
 endmodule
 
 // switch between key controls and keyboard controls based on input
